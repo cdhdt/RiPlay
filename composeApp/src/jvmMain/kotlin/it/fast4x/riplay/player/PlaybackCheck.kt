@@ -46,23 +46,28 @@ fun main(args: Array<String>) = runBlocking {
     probe.disconnect()
 
     try {
-        // YouTube ties a stream URL to the client that asked for it, so VLC has to present the
-        // same user-agent or some tracks answer 403 while others play.
-        check(player.media().play(url, ":http-user-agent=$userAgent")) {
+        check(player.media().play(url)) {
             "FAILED: libvlc refused to open the stream"
         }
 
-        // Startup covers the network handshake; VLC reports isPlaying before any audio is decoded.
+        // A short run only proves the first chunk works. -PplaySeconds=90 crosses a chunk boundary,
+        // which is where the stream is refetched and where 403s showed up.
+        val targetMs = (System.getProperty("playSeconds")?.toLongOrNull() ?: 15L) * 1000
         var elapsed = 0L
-        repeat(30) {
+        var stalledFor = 0
+        while (elapsed < targetMs && stalledFor < 20) {
             Thread.sleep(500)
-            elapsed = player.status().time()
-            if (elapsed > 1000) return@repeat
+            val now = player.status().time()
+            stalledFor = if (now > elapsed) 0 else stalledFor + 1
+            elapsed = now
         }
 
         println("playing=${player.status().isPlaying} time=${elapsed}ms length=${player.status().length()}ms")
         check(player.status().isPlaying) { "FAILED: player is not playing" }
         check(elapsed > 0) { "FAILED: playback clock never advanced, nothing is being decoded" }
+        check(elapsed >= targetMs) {
+            "FAILED: playback stalled at ${elapsed}ms, expected to reach ${targetMs}ms"
+        }
 
         println("OK: audio is decoding through VLC.")
     } finally {

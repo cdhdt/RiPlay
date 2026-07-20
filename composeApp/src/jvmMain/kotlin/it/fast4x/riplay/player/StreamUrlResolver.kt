@@ -46,8 +46,5 @@ suspend fun resolveAudioStreamUrl(videoId: String): String? = withContext(Dispat
     NewPipeUtils.getStreamUrl(format, videoId)
         .onFailure { println("resolveAudioStreamUrl: url deciphering failed — $it") }
         .getOrNull()
-        // Restores what the original desktop code did before it was commented out: asking for an
-        // explicit range keeps YouTube from throttling the stream. It does not fix the 403 some
-        // tracks return — that one is VLC's request being rejected, not the URL.
-        ?.let { "$it&range=0-${format.contentLength ?: 10_000_000}" }
+
 }
