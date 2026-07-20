@@ -157,6 +157,9 @@ compose.desktop {
             packageName = "RiPlay"
             packageVersion = riplayVersion
 
+            // Per-platform subdirectories; only windows-x64 is populated, by stageWindowsVlc.
+            appResourcesRootDir.set(layout.buildDirectory.dir("vlc-resources"))
+
             // jpackage needs raster icons; see desktop-icons/README.md to regenerate them.
             // No macOS entry: not a build target, so no .icns to keep around.
             val iconsRoot = project.file("desktop-icons")
@@ -356,14 +359,78 @@ room {
     generateKotlin = true
 }
 
+// VLC ships a self-contained build for Windows, so the package can carry its own copy and play
+// out of the box. Linux is left to the system install on purpose: its plugins link against ~140
+// system libraries, and shipping that closure is what AppImage and Flatpak are for.
+val vlcWindowsVersion = "3.0.21"
+val hostIsWindows = System.getProperty("os.name").lowercase().contains("win")
+
+val prepareVlcResources by tasks.registering {
+    description = "Stages the bundled VLC runtime for platforms that need one"
+    outputs.dir(layout.buildDirectory.dir("vlc-resources"))
+
+    doLast {
+        val root = layout.buildDirectory.dir("vlc-resources").get().asFile
+        root.mkdirs()
+
+        // Only Windows packages carry VLC. On Linux the directory stays empty, which is what
+        // appResourcesRootDir expects, and VlcNative then falls back to the system install.
+        if (!hostIsWindows) return@doLast
+
+        val target = File(root, "windows-x64/vlc")
+        if (File(target, "libvlc.dll").exists()) return@doLast
+        target.mkdirs()
+
+        val archive = File(temporaryDir, "vlc-$vlcWindowsVersion-win64.zip")
+        if (!archive.exists()) {
+            val url = "https://get.videolan.org/vlc/$vlcWindowsVersion/win64/" +
+                    "vlc-$vlcWindowsVersion-win64.zip"
+            logger.lifecycle("Downloading $url")
+            uri(url).toURL().openStream().use { input ->
+                archive.outputStream().use { output -> input.copyTo(output) }
+            }
+        }
+
+        // The archive also holds the VLC desktop app, which would be dead weight in the package.
+        val prefix = "vlc-$vlcWindowsVersion/"
+        val runtimeDlls = setOf("libvlc.dll", "libvlccore.dll")
+        zipTree(archive).visit {
+            if (isDirectory) return@visit
+            val relative = path.removePrefix(prefix)
+            val keep = relative.startsWith("plugins/") || name in runtimeDlls
+            if (relative == path || !keep) return@visit
+            val destination = File(target, relative)
+            destination.parentFile.mkdirs()
+            file.copyTo(destination, overwrite = true)
+        }
+
+        require(File(target, "libvlc.dll").exists()) { "libvlc.dll missing from the VLC archive" }
+        logger.lifecycle("Staged VLC into $target")
+    }
+}
+
+// prepareAppResources is the Compose task that reads appResourcesRootDir, so it is the one that
+// has to wait; the packaging tasks all funnel through it.
+tasks.matching { it.name == "prepareAppResources" }
+    .configureEach { dependsOn(prepareVlcResources) }
+
 // ./gradlew :composeApp:checkStreamUrl [-PvideoId=<id>]
-tasks.register<JavaExec>("checkStreamUrl") {
-    group = "verification"
-    description = "Resolves a YouTube audio stream URL and checks it is actually playable"
-    val jvmMain = kotlin.jvm().compilations.getByName("main")
-    classpath = files(jvmMain.output.allOutputs, jvmMain.runtimeDependencyFiles)
-    mainClass.set("it.fast4x.riplay.player.StreamUrlCheckKt")
-    (project.findProperty("videoId") as String?)?.let { args(it) }
+// ./gradlew :composeApp:checkPlayback  [-PvideoId=<id>]
+listOf(
+    "checkStreamUrl" to "it.fast4x.riplay.player.StreamUrlCheckKt",
+    "checkPlayback" to "it.fast4x.riplay.player.PlaybackCheckKt",
+).forEach { (taskName, entryPoint) ->
+    tasks.register<JavaExec>(taskName) {
+        group = "verification"
+        description = "Checks the YouTube to VLC playback chain end to end"
+        val jvmMain = kotlin.jvm().compilations.getByName("main")
+        classpath = files(jvmMain.output.allOutputs, jvmMain.runtimeDependencyFiles)
+        mainClass.set(entryPoint)
+        (project.findProperty("videoId") as String?)?.let { args(it) }
+        // Lets the checks exercise the bundled-VLC path without building a package.
+        (project.findProperty("resourcesDir") as String?)
+            ?.let { systemProperty("compose.application.resources.dir", it) }
+    }
 }
 
 // The dependencies block below is commented out in full, leaving Room without a KSP compiler.
