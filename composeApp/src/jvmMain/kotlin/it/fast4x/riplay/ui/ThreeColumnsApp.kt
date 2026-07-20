@@ -80,7 +80,6 @@ fun ThreeColumnsApp() {
 
     var videoId by remember { mutableStateOf("") }
     var nowPlayingSong by remember { mutableStateOf<Song?>(null) }
-    // URL audio résolue pour videoId. Null tant qu'aucune piste n'est sélectionnée ou résolue.
     var url by remember { mutableStateOf<String?>(null) }
     var artistId by remember { mutableStateOf("") }
     var albumId by remember { mutableStateOf("") }
@@ -92,11 +91,11 @@ fun ThreeColumnsApp() {
 
         nowPlayingSong = db.getSong(videoId)
 
-        // On repart de zéro à chaque piste : sinon VLCJ continue de jouer la précédente pendant que
-        // la nouvelle se résout, et rejoue l'ancienne si la nouvelle échoue.
+        // Cleared first, otherwise VLCJ keeps playing the previous track while the new one
+        // resolves, and falls back to it if resolution fails.
         url = null
         url = resolveAudioStreamUrl(videoId)
-        if (url == null) println("Flux introuvable pour $videoId (piste indisponible ?)")
+        if (url == null) println("No stream for $videoId")
     }
 
     coroutineScope.launch {

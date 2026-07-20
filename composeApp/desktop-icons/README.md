@@ -1,10 +1,10 @@
-# Icônes desktop
+# Desktop icons
 
-Consommées par le bloc `nativeDistributions` de `composeApp/build.gradle.kts`. `jpackage` n'accepte
-ni SVG ni les vecteurs Android (`composeResources/drawable/app_icon.xml`) : il lui faut du `.png`
-sous Linux et du `.ico` sous Windows, d'où ces fichiers binaires versionnés.
+Consumed by the `nativeDistributions` block in `composeApp/build.gradle.kts`. jpackage accepts
+neither SVG nor the Android vector in `composeResources/drawable/app_icon.xml`, so these raster
+files are checked in.
 
-Régénérer depuis la source si le logo change :
+Regenerate from the source when the logo changes:
 
 ```sh
 magick -background none -density 512 assets/design/latest/app_icon.svg \
@@ -14,8 +14,7 @@ magick -background none -density 512 assets/design/latest/app_icon.svg \
   -define icon:auto-resize=256,128,64,48,32,16 composeApp/desktop-icons/icon-windows.ico
 ```
 
-Vérifier le rendu après coup : ImageMagick sans délégué `rsvg` ou `inkscape` sait produire une image
-vide ou tronquée sans le signaler.
+Check the output afterwards: without an `rsvg` or `inkscape` delegate, ImageMagick can silently
+produce a blank or clipped image.
 
-Pas de `.icns` : macOS n'est pas une cible, inutile de maintenir un asset pour une plateforme qu'on
-ne construit pas.
+No `.icns`, since macOS is not a build target.

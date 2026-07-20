@@ -8,25 +8,17 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.ExperimentalSerializationApi
 
 /**
- * Résout l'URL audio jouable d'une vidéo YouTube, à donner à VLCJ.
- *
- * Reprend la même chaîne que l'app Android (`extensions/players/SimpleMetadataPlayer.kt`) : tout passe
- * par le module `environment`, qui est en JVM pur — rien d'Android là-dedans.
- *
- * Renvoie null si la piste est indisponible (retirée, bloquée par région, âge restreint…) : à l'appelant
- * de décider quoi en faire. On ne lève pas, ce cas est courant et normal.
+ * Resolves a playable audio URL for VLCJ. Returns null when the track is unavailable
+ * (removed, region blocked, age restricted) — a common case, not an error.
  */
 @OptIn(ExperimentalSerializationApi::class)
 suspend fun resolveAudioStreamUrl(videoId: String): String? = withContext(Dispatchers.IO) {
-    // Sans signatureTimestamp YouTube renvoie des formats dont la signature est inexploitable.
     val signatureTimestamp = NewPipeUtils.getSignatureTimestamp(videoId)
-        .onFailure { println("resolveAudioStreamUrl: signatureTimestamp indisponible — $it") }
+        .onFailure { println("resolveAudioStreamUrl: no signature timestamp — $it") }
         .getOrNull()
 
-    // DefaultWeb3 (client iOS) renvoie des URL directes ; DefaultWeb (WEB_REMIX) renvoie des
-    // signatureCipher qu'il faut déchiffrer via NewPipeExtractor — étape que YouTube casse
-    // régulièrement et qui est en panne à ce jour. On prend donc iOS d'abord, WEB en repli au cas
-    // où la config distante changerait. Diagnostic : ./gradlew :composeApp:checkStreamUrl
+    // The iOS client returns direct URLs; WEB_REMIX returns signatureCipher, whose deciphering
+    // YouTube breaks regularly. Diagnose with ./gradlew :composeApp:checkStreamUrl
     val player = listOf(Context.DefaultWeb3, Context.DefaultWeb)
         .firstNotNullOfOrNull { context ->
             EnvironmentExt.simpleMetadataPlayer(
@@ -34,26 +26,24 @@ suspend fun resolveAudioStreamUrl(videoId: String): String? = withContext(Dispat
                 client = context.client,
                 signatureTimestamp = signatureTimestamp,
             )
-                .onFailure { println("resolveAudioStreamUrl: appel player en échec — $it") }
+                .onFailure { println("resolveAudioStreamUrl: player call failed — $it") }
                 .getOrNull()
                 ?.takeIf { it.streamingData?.autoMaxQualityFormat != null }
         } ?: return@withContext null
 
     if (player.playabilityStatus?.status != "OK") {
-        println("resolveAudioStreamUrl: $videoId non jouable — ${player.playabilityStatus?.status}")
+        println("resolveAudioStreamUrl: $videoId not playable — ${player.playabilityStatus?.status}")
         return@withContext null
     }
 
-    // ponytail: autoMaxQualityFormat privilégie déjà les itags audio (251/140/141...), inutile de
-    // refaire le tri ici. Un sélecteur de qualité viendra le jour où c'est réglable dans l'UI.
     val format = player.streamingData?.autoMaxQualityFormat
     if (format == null) {
-        println("resolveAudioStreamUrl: aucun format exploitable " +
-                "(${player.streamingData?.adaptiveFormats?.size ?: 0} formats reçus)")
+        println("resolveAudioStreamUrl: no usable format " +
+                "(${player.streamingData?.adaptiveFormats?.size ?: 0} returned)")
         return@withContext null
     }
 
     NewPipeUtils.getStreamUrl(format, videoId)
-        .onFailure { println("resolveAudioStreamUrl: déchiffrement d'URL en échec — $it") }
+        .onFailure { println("resolveAudioStreamUrl: url deciphering failed — $it") }
         .getOrNull()
 }

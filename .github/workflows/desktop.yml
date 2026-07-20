@@ -1,7 +1,6 @@
 name: Desktop
 
-# Aucun workflow upstream ne construit la cible desktop — celui-ci s'en charge.
-# Il ne touche pas aux workflows Android existants.
+# No upstream workflow builds the desktop target. Leaves the Android workflows alone.
 on:
   push:
     branches: [desktop-linux-windows]
@@ -13,7 +12,7 @@ on:
 jobs:
   package:
     strategy:
-      # Un échec sous Windows ne doit pas annuler le paquet Linux déjà en cours, et inversement.
+      # A Windows failure must not cancel the Linux packages already building, and vice versa.
       fail-fast: false
       matrix:
         include:
@@ -29,40 +28,42 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Installe JDK 21
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           java-version: "21"
           distribution: temurin
 
-      - name: Prépare Gradle
+      - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      # packageRpm invoque rpmbuild, absent des runners ubuntu.
-      - name: Installe rpmbuild
+      # packageRpm shells out to rpmbuild, which ubuntu runners do not ship.
+      - name: Install rpmbuild
         if: matrix.name == 'linux'
         run: sudo apt-get update && sudo apt-get install -y rpm
 
-      # Sur un tag v1.2.3 le paquet doit porter 1.2.3, pas la valeur de gradle.properties.
-      - name: Déduit la version du tag
+      # On a v1.2.3 tag the package must carry 1.2.3, not the gradle.properties value.
+      - name: Derive version from tag
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
         run: echo "RIPLAY_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
 
-      - name: Construit les paquets
+      - name: Build packages
         shell: bash
         run: |
           ./gradlew ${{ matrix.tasks }} --no-daemon \
             ${RIPLAY_VERSION:+-PriplayVersion=$RIPLAY_VERSION}
 
-      # Le job réussirait avec zéro fichier produit si une tâche cessait silencieusement
-      # d'émettre son paquet : on échoue explicitement plutôt que publier un artefact vide.
-      - name: Vérifie qu'un paquet a bien été produit
+      # The job would pass with zero files if a task silently stopped emitting its package.
+      # Writes to a file rather than `tee /dev/stderr`, which Git Bash on Windows does not have —
+      # and which fails the whole pipeline under `pipefail`, masking whatever was really produced.
+      - name: Check a package was produced
         shell: bash
         run: |
-          found=$(find composeApp/build/compose/binaries -type f \
-            \( -name '*.deb' -o -name '*.rpm' -o -name '*.msi' \) | tee /dev/stderr | wc -l)
-          test "$found" -gt 0 || { echo "Aucun paquet produit"; exit 1; }
+          find composeApp/build/compose/binaries -type f \
+            \( -name '*.deb' -o -name '*.rpm' -o -name '*.msi' \) > packages.txt
+          cat packages.txt
+          test -s packages.txt || { echo "No package produced"; exit 1; }
 
       - uses: actions/upload-artifact@v4
         with:
