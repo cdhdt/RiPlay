@@ -170,7 +170,8 @@ extensions.configure<ApplicationExtension> {
         targetSdk = 37
 
         versionCode = 92
-        versionName = "0.7.91"
+        // ponytail: source unique dans gradle.properties, partagée avec la cible desktop.
+        versionName = providers.gradleProperty("riplayVersion").get()
 
 
         // INIT ENVIRONMENT
