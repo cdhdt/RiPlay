@@ -3,6 +3,7 @@ import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import java.security.MessageDigest
 import java.util.Properties
 
 plugins {
@@ -363,6 +364,9 @@ room {
 // out of the box. Linux is left to the system install on purpose: its plugins link against ~140
 // system libraries, and shipping that closure is what AppImage and Flatpak are for.
 val vlcWindowsVersion = "3.0.21"
+// Published alongside the archive as <name>.sha256. Pinned because this binary goes straight into
+// an installer we hand to users, so a corrupted or swapped download has to fail the build loudly.
+val vlcWindowsSha256 = "a0b7ec02b50adf6417eed014fb8df50af39690505a4225b85b3dc2ed17d14843"
 val hostIsWindows = System.getProperty("os.name").lowercase().contains("win")
 
 val prepareVlcResources by tasks.registering {
@@ -375,7 +379,9 @@ val prepareVlcResources by tasks.registering {
 
         // Only Windows packages carry VLC. On Linux the directory stays empty, which is what
         // appResourcesRootDir expects, and VlcNative then falls back to the system install.
-        if (!hostIsWindows) return@doLast
+        // -PforceVlcStaging exercises the download from a non-Windows machine, so the fetch and
+        // checksum can be checked without spending a CI round trip.
+        if (!hostIsWindows && !project.hasProperty("forceVlcStaging")) return@doLast
 
         val target = File(root, "windows-x64/vlc")
         if (File(target, "libvlc.dll").exists()) return@doLast
@@ -383,7 +389,9 @@ val prepareVlcResources by tasks.registering {
 
         val archive = File(temporaryDir, "vlc-$vlcWindowsVersion-win64.zip")
         if (!archive.exists()) {
-            val url = "https://get.videolan.org/vlc/$vlcWindowsVersion/win64/" +
+            // Not get.videolan.org: it 302s to a randomly picked mirror, and a failing one answers
+            // with an HTML error page that only surfaces later as "Cannot expand ZIP".
+            val url = "https://download.videolan.org/pub/videolan/vlc/$vlcWindowsVersion/win64/" +
                     "vlc-$vlcWindowsVersion-win64.zip"
             logger.lifecycle("Downloading $url")
             uri(url).toURL().openStream().use { input ->
@@ -391,13 +399,37 @@ val prepareVlcResources by tasks.registering {
             }
         }
 
+        val digest = MessageDigest.getInstance("SHA-256")
+        archive.inputStream().use { input ->
+            val buffer = ByteArray(1 shl 16)
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                digest.update(buffer, 0, read)
+            }
+        }
+        val actualSha256 = digest.digest()
+            .joinToString("") { byte -> String.format("%02x", byte) }
+        if (actualSha256 != vlcWindowsSha256) {
+            archive.delete()
+            error(
+                "VLC archive checksum mismatch: expected $vlcWindowsSha256, got $actualSha256. " +
+                        "The download was truncated or served by a mirror we do not trust."
+            )
+        }
+
         // The archive also holds the VLC desktop app, which would be dead weight in the package.
         val prefix = "vlc-$vlcWindowsVersion/"
         val runtimeDlls = setOf("libvlc.dll", "libvlccore.dll")
+        // 19 MB of VLC's own Qt interface, 17 of them one DLL. libvlc never loads it: we drive it
+        // as a library and never ask for an interface. The other plugin folders stay — codec,
+        // access and demux are what actually decode the stream.
+        val unusedPlugins = "plugins/gui/"
         zipTree(archive).visit {
             if (isDirectory) return@visit
             val relative = path.removePrefix(prefix)
-            val keep = relative.startsWith("plugins/") || name in runtimeDlls
+            val keep = (relative.startsWith("plugins/") && !relative.startsWith(unusedPlugins)) ||
+                    name in runtimeDlls
             if (relative == path || !keep) return@visit
             val destination = File(target, relative)
             destination.parentFile.mkdirs()
