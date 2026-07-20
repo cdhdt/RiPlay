@@ -1,34 +1,27 @@
 package vlcj
 
-import com.sun.jna.NativeLibrary.addSearchPath
 import exception.catch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import it.fast4x.riplay.player.vlcj.VlcNative
 import player.PlayerController
 import player.PlayerState
-import uk.co.caprica.vlcj.binding.support.runtime.RuntimeUtil
 import uk.co.caprica.vlcj.factory.MediaPlayerFactory
-import uk.co.caprica.vlcj.factory.discovery.NativeDiscovery
 import uk.co.caprica.vlcj.player.base.MediaPlayer
 import uk.co.caprica.vlcj.player.base.MediaPlayerEventAdapter
 import uk.co.caprica.vlcj.player.embedded.EmbeddedMediaPlayer
-import java.nio.file.Paths
-import kotlin.io.path.pathString
 
 class VlcjController : PlayerController {
 
     init {
-        //println("desktop VlcjController init ${System.setProperty("jna.library.path", System.getProperty("user.dir"))}")
-        addSearchPath(
-            RuntimeUtil.getLibVlcLibraryName(),
-            Paths.get(System.getProperty("user.dir"), "lib", "libvlc.dll").pathString
-        )
-        NativeDiscovery().discover()
+        // Was pointing JNA at a hardcoded user.dir/lib/libvlc.dll — a file where a directory is
+        // expected, and Windows-only. Only the discovery call below it ever worked.
+        if (!VlcNative.available) println(VlcNative.missingMessage())
     }
 
-    internal val factory by lazy { MediaPlayerFactory() }
+    internal val factory by lazy { MediaPlayerFactory(*VlcNative.factoryArgs) }
 
     internal var player: EmbeddedMediaPlayer? = null
         private set
