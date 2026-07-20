@@ -1,0 +1,74 @@
+name: Desktop
+
+# Aucun workflow upstream ne construit la cible desktop — celui-ci s'en charge.
+# Il ne touche pas aux workflows Android existants.
+on:
+  push:
+    branches: [desktop-linux-windows]
+    tags: ["v*"]
+  pull_request:
+    branches: [desktop-linux-windows]
+  workflow_dispatch:
+
+jobs:
+  package:
+    strategy:
+      # Un échec sous Windows ne doit pas annuler le paquet Linux déjà en cours, et inversement.
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: linux
+            tasks: ":composeApp:packageDeb :composeApp:packageRpm"
+          - os: windows-latest
+            name: windows
+            tasks: ":composeApp:packageMsi"
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Installe JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: temurin
+
+      - name: Prépare Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # packageRpm invoque rpmbuild, absent des runners ubuntu.
+      - name: Installe rpmbuild
+        if: matrix.name == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y rpm
+
+      # Sur un tag v1.2.3 le paquet doit porter 1.2.3, pas la valeur de gradle.properties.
+      - name: Déduit la version du tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: echo "RIPLAY_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: Construit les paquets
+        shell: bash
+        run: |
+          ./gradlew ${{ matrix.tasks }} --no-daemon \
+            ${RIPLAY_VERSION:+-PriplayVersion=$RIPLAY_VERSION}
+
+      # Le job réussirait avec zéro fichier produit si une tâche cessait silencieusement
+      # d'émettre son paquet : on échoue explicitement plutôt que publier un artefact vide.
+      - name: Vérifie qu'un paquet a bien été produit
+        shell: bash
+        run: |
+          found=$(find composeApp/build/compose/binaries -type f \
+            \( -name '*.deb' -o -name '*.rpm' -o -name '*.msi' \) | tee /dev/stderr | wc -l)
+          test "$found" -gt 0 || { echo "Aucun paquet produit"; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: riplay-desktop-${{ matrix.name }}
+          path: |
+            composeApp/build/compose/binaries/main/deb/*.deb
+            composeApp/build/compose/binaries/main/rpm/*.rpm
+            composeApp/build/compose/binaries/main/msi/*.msi
+          if-no-files-found: error

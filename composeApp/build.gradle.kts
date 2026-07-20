@@ -19,6 +19,10 @@ plugins {
 fun Project.propertyOrEmpty(name: String): String {
     return (findProperty(name) as? String) ?: ""
 }
+
+// Définie dans gradle.properties, partagée avec androidApp pour que desktop et Android
+// n'affichent jamais deux numéros différents. Surchargeable par -PriplayVersion=<x.y.z>.
+val riplayVersion: String by project
 val generatedSrcDir = layout.buildDirectory.dir("generated/kotlin/config").get()
 
 val generateEnvironmentConfig by tasks.registering {
@@ -143,30 +147,33 @@ compose.desktop {
 
         mainClass = "MainKt"
 
-        version = "0.0.1"
+        // ponytail: était "0.0.1" en dur alors qu'Android en est à 0.7.85. Source unique dans
+        // gradle.properties, surchargeable en CI par -PriplayVersion=<x.y.z> pour les tags.
+        version = riplayVersion
         group = "riplay"
 
         nativeDistributions {
-            vendor = "RiPlay.DesktopApp"
+            vendor = "RiPlay"
             description = "RiPlay Desktop Music Player"
 
             targetFormats(TargetFormat.Msi, TargetFormat.Deb, TargetFormat.Rpm)
-            packageName = "RiPLay.DesktopApp"
-            packageVersion = "0.0.1"
+            packageName = "RiPlay"
+            packageVersion = riplayVersion
 
-            /*
+            // ponytail: bloc réactivé. Il était commenté et pointait vers un répertoire absent —
+            // le décommenter tel quel cassait le build. Les icônes sont maintenant versionnées,
+            // générées depuis assets/design/latest/app_icon.svg (voir desktop-icons/README.md).
+            // macOS volontairement omis : pas de cible mac, donc pas de .icns à maintenir.
             val iconsRoot = project.file("desktop-icons")
             windows {
                 iconFile.set(iconsRoot.resolve("icon-windows.ico"))
             }
-            macOS {
-                iconFile.set(iconsRoot.resolve("icon-mac.icns"))
-            }
             linux {
                 iconFile.set(iconsRoot.resolve("icon-linux.png"))
+                // Sans ça le .desktop sort avec Categories=Unknown et l'app n'atterrit
+                // dans aucune section du menu d'applications.
+                menuGroup = "Audio"
             }
-
-             */
         }
 
     }
