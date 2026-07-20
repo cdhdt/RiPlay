@@ -4,14 +4,13 @@ import androidx.compose.runtime.Immutable
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
-/*
 
 @Immutable
 @Entity(
     primaryKeys = ["songId", "artistId"],
     foreignKeys = [
         ForeignKey(
-            entity = _Song::class,
+            entity = Song::class,
             parentColumns = ["id"],
             childColumns = ["songId"],
             onDelete = ForeignKey.CASCADE
@@ -30,4 +29,3 @@ data class SongArtistMap(
 )
 
 
- */

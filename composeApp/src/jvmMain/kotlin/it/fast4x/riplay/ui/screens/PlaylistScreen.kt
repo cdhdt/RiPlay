@@ -63,8 +63,8 @@ import it.fast4x.riplay.utils.resize
 import it.fast4x.riplay.utils.completed
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import me.bush.translator.Language
-import me.bush.translator.Translator
+import dev.rebelonion.translator.Language
+import dev.rebelonion.translator.Translator
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import riplay.composeapp.generated.resources.Res
@@ -111,7 +111,9 @@ fun PlaylistScreen(
         mutableStateOf(false)
     }
 
-    val translator = Translator(getHttpClient())
+    // ponytail: le fork rebelonion attend un OkHttpClient là où therealbush prenait un HttpClient
+    // Ktor. Son constructeur a une valeur par défaut, donc pas de client à fabriquer ici.
+    val translator = Translator()
     val languageDestination = languageDestination()
 
     Box(
