@@ -112,6 +112,12 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
     dependsOn(generateEnvironmentConfig)
 }
 
+// ponytail: les tâches KSP ne sont pas des KotlinCompile mais lisent le même répertoire généré.
+// Sans cette ligne Gradle refuse le build (dépendance implicite non déclarée entre tâches).
+tasks.matching { it.name.startsWith("ksp") }.configureEach {
+    dependsOn(generateEnvironmentConfig)
+}
+
 /*
 repositories {
     google()
@@ -244,7 +250,14 @@ kotlin {
             implementation(libs.material.icon.desktop)
             implementation(libs.vlcj)
 
-            val fxSuffix = "win"
+            // ponytail: était "win" en dur, donc rien ne buildait hors Windows.
+            // Classifier JavaFX déduit de l'OS qui build. Pour cross-compiler, forcer -PfxSuffix=win|linux|mac.
+            val os = System.getProperty("os.name").lowercase()
+            val fxSuffix = (project.findProperty("fxSuffix") as String?) ?: when {
+                os.contains("win") -> "win"
+                os.contains("mac") -> "mac"
+                else -> "linux"
+            }
             implementation("org.openjfx:javafx-base:21.0.5:${fxSuffix}")
             implementation("org.openjfx:javafx-graphics:21.0.5:${fxSuffix}")
             implementation("org.openjfx:javafx-controls:21.0.5:${fxSuffix}")
@@ -255,14 +268,15 @@ kotlin {
             implementation(libs.coil.network.okhttp)
             runtimeOnly(libs.kotlinx.coroutines.swing)
 
-            /*
-            // Uncomment only for build jvm desktop version
-            // Comment before build android version
-            configurations.commonMainApi {
+        }
+
+        // ponytail: remplace le bloc commenté "uncomment for desktop / comment for android".
+        // Scopé aux configurations du target jvm au lieu de commonMainApi : plus besoin de
+        // commenter/décommenter entre un build desktop et un build android.
+        listOf("jvmCompileClasspath", "jvmRuntimeClasspath").forEach { name ->
+            configurations.named(name) {
                 exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-android")
             }
-            */
-
         }
 
         androidMain.dependencies {
@@ -338,6 +352,26 @@ kotlin {
 room {
     schemaDirectory("$projectDir/schemas")
     generateKotlin = true
+}
+
+// ponytail: vérifie la résolution d'URL de flux sans lancer l'UI.
+//   ./gradlew :composeApp:checkStreamUrl [-PvideoId=<id>]
+tasks.register<JavaExec>("checkStreamUrl") {
+    group = "verification"
+    description = "Résout une URL de flux audio YouTube et vérifie qu'elle est réellement jouable"
+    val jvmMain = kotlin.jvm().compilations.getByName("main")
+    classpath = files(jvmMain.output.allOutputs, jvmMain.runtimeDependencyFiles)
+    mainClass.set("it.fast4x.riplay.player.StreamUrlCheckKt")
+    (project.findProperty("videoId") as String?)?.let { args(it) }
+}
+
+// ponytail: le bloc dependencies d'origine (juste en dessous) est commenté en entier, donc Room
+// n'avait aucun compilateur KSP enregistré et ne générait rien. On ne réactive que le strict
+// nécessaire, sans les flavors ni le desugaring qui sont probablement la cause du commentaire.
+// Le target KMP s'appelle "jvm" : la config est donc kspJvm, pas kspDesktop qui n'existe pas.
+dependencies {
+    add("kspAndroid", libs.room.compiler)
+    add("kspJvm", libs.room.compiler)
 }
 
 /*

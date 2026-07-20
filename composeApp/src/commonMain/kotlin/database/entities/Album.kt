@@ -3,10 +3,9 @@ package database.entities
 import androidx.compose.runtime.Immutable
 import androidx.room.Entity
 import androidx.room.PrimaryKey
-/*
 @Immutable
 @Entity
-data class _Album(
+data class Album(
     @PrimaryKey val id: String,
     val title: String? = null,
     val thumbnailUrl: String? = null,
@@ -23,11 +22,10 @@ data class _Album(
     val shareYTMUrl: String?
         get() = shareUrl?.replace("www.","music.")
 
-    fun toggleBookmark(): _Album {
+    fun toggleBookmark(): Album {
         return copy(
             bookmarkedAt = if (bookmarkedAt == null) System.currentTimeMillis() else null
         )
     }
 }
 
- */

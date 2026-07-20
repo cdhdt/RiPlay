@@ -2,6 +2,7 @@ package it.fast4x.environment.utils
 
 import it.fast4x.environment.Environment
 import it.fast4x.environment.models.Context
+import it.fast4x.environment.models.PlayerResponse
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.schabi.newpipe.extractor.NewPipe
@@ -12,6 +13,7 @@ import org.schabi.newpipe.extractor.exceptions.ReCaptchaException
 import org.schabi.newpipe.extractor.services.youtube.YoutubeJavaScriptPlayerManager
 import java.io.IOException
 import java.net.Proxy
+import java.net.URLDecoder
 
 private class NewPipeDownloaderImpl(proxy: Proxy?) : Downloader() {
 
@@ -66,6 +68,38 @@ object NewPipeUtils {
 
     fun getSignatureTimestamp(videoId: String): Result<Int> = runCatching {
         YoutubeJavaScriptPlayerManager.getSignatureTimestamp(videoId)
+    }
+
+    /**
+     * Transforme un [PlayerResponse.StreamingData.Format] en URL réellement jouable.
+     *
+     * Deux obstacles côté YouTube : soit l'URL est fournie telle quelle, soit elle arrive sous forme
+     * de `signatureCipher` dont la signature doit être déchiffrée. Dans les deux cas le paramètre `n`
+     * doit ensuite être déchiffré lui aussi, faute de quoi YouTube bride le débit à ~50 ko/s.
+     */
+    fun getStreamUrl(
+        format: PlayerResponse.StreamingData.Format,
+        videoId: String
+    ): Result<String> = runCatching {
+        val url = format.url ?: format.signatureCipher?.let { cipher ->
+            val params = cipher.split("&")
+                .mapNotNull { it.split("=", limit = 2).takeIf { p -> p.size == 2 } }
+                .associate { (k, v) -> k to URLDecoder.decode(v, "UTF-8") }
+
+            val baseUrl = params["url"] ?: error("signatureCipher sans paramètre url")
+            val obfuscated = params["s"] ?: error("signatureCipher sans paramètre s")
+            val sigParam = params["sp"] ?: "signature"
+            val signature = YoutubeJavaScriptPlayerManager.deobfuscateSignature(videoId, obfuscated)
+
+            "$baseUrl&$sigParam=$signature"
+        } ?: error("Format sans url ni signatureCipher (itag ${format.itag})")
+
+        // Le déchiffrement du paramètre `n` casse dès que YouTube modifie son player JS. Sans lui on
+        // récupère quand même un flux jouable, simplement bridé — c'est très préférable à ne rien
+        // jouer du tout. On ne laisse donc pas cet échec-là condamner une URL par ailleurs valide.
+        runCatching {
+            YoutubeJavaScriptPlayerManager.getUrlWithThrottlingParameterDeobfuscated(videoId, url)
+        }.getOrElse { url }
     }
 
 }

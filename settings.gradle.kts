@@ -14,11 +14,11 @@ pluginManagement {
         maven("https://maven.pkg.jetbrains.space/kotlin/p/kotlin/dev")
     }
 }
-/*
+// ponytail: réactivé pour que Gradle télécharge lui-même le JDK 21 exigé par le toolchain.
+// Sans ça il faut un openjdk-21-jdk installé à la main sur la machine de build.
 plugins {
     id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
 }
- */
 
 dependencyResolutionManagement {
     repositories {

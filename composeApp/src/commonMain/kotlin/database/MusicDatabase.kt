@@ -1,6 +1,5 @@
 package database
 
-/*
 import androidx.room.AutoMigration
 import androidx.room.ConstructedBy
 import androidx.room.Dao
@@ -118,4 +117,3 @@ fun getRoomDatabase(
 }
 
 
- */
