@@ -462,6 +462,8 @@ listOf(
         // Lets the checks exercise the bundled-VLC path without building a package.
         (project.findProperty("resourcesDir") as String?)
             ?.let { systemProperty("compose.application.resources.dir", it) }
+        (project.findProperty("playSeconds") as String?)
+            ?.let { systemProperty("playSeconds", it) }
     }
 }
 
