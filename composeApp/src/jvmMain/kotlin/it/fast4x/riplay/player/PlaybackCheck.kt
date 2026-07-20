@@ -31,8 +31,26 @@ fun main(args: Array<String>) = runBlocking {
     val factory = MediaPlayerFactory(*VlcNative.factoryArgs, "--aout=dummy", "--quiet")
     val player = factory.mediaPlayers().newMediaPlayer()
 
+    val userAgent = it.fast4x.environment.models.Context.DefaultWeb3.client.userAgent
+    println("client user-agent: $userAgent")
+
+    // Probes the very URL handed to VLC next. Resolving a second one would compare two different
+    // URLs and prove nothing about which side is at fault.
+    val probe = (java.net.URI(url).toURL().openConnection() as java.net.HttpURLConnection).apply {
+        requestMethod = "GET"
+        setRequestProperty("Range", "bytes=0-1")
+        connectTimeout = 15_000
+        readTimeout = 15_000
+    }
+    println("java GET on the same url: HTTP ${probe.responseCode} ${probe.contentType}")
+    probe.disconnect()
+
     try {
-        check(player.media().play(url)) { "FAILED: libvlc refused to open the stream" }
+        // YouTube ties a stream URL to the client that asked for it, so VLC has to present the
+        // same user-agent or some tracks answer 403 while others play.
+        check(player.media().play(url, ":http-user-agent=$userAgent")) {
+            "FAILED: libvlc refused to open the stream"
+        }
 
         // Startup covers the network handshake; VLC reports isPlaying before any audio is decoded.
         var elapsed = 0L
