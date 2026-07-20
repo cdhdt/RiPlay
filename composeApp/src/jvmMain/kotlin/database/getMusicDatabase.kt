@@ -4,12 +4,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import java.io.File
 
-/**
- * Répertoire où RiPlay range ses données (base, et plus tard cache et réglages).
- *
- * Respecte les conventions de chaque OS plutôt que d'écrire dans le dossier personnel :
- * `%APPDATA%` sous Windows, `$XDG_DATA_HOME` (défaut `~/.local/share`) sous Linux.
- */
+/** Per-OS data directory: %APPDATA% on Windows, $XDG_DATA_HOME on Linux. */
 fun riplayDataDirectory(): File {
     val os = System.getProperty("os.name").orEmpty().lowercase()
     val home = System.getProperty("user.home")
@@ -25,7 +20,7 @@ fun riplayDataDirectory(): File {
 }
 
 fun getDesktopDatabaseBuilder(): RoomDatabase.Builder<MusicDatabase> {
-    // ponytail: était java.io.tmpdir, donc favoris et historique disparaissaient au redémarrage.
+    // Was java.io.tmpdir, which wiped favourites and history on every restart.
     val dbFile = File(riplayDataDirectory(), "riplay.db")
     return Room.databaseBuilder<MusicDatabase>(
         name = dbFile.absolutePath,

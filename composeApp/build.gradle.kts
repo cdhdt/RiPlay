@@ -20,8 +20,7 @@ fun Project.propertyOrEmpty(name: String): String {
     return (findProperty(name) as? String) ?: ""
 }
 
-// Définie dans gradle.properties, partagée avec androidApp pour que desktop et Android
-// n'affichent jamais deux numéros différents. Surchargeable par -PriplayVersion=<x.y.z>.
+// Defined in gradle.properties, shared with androidApp. Override with -PriplayVersion=<x.y.z>.
 val riplayVersion: String by project
 val generatedSrcDir = layout.buildDirectory.dir("generated/kotlin/config").get()
 
@@ -116,8 +115,8 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
     dependsOn(generateEnvironmentConfig)
 }
 
-// ponytail: les tâches KSP ne sont pas des KotlinCompile mais lisent le même répertoire généré.
-// Sans cette ligne Gradle refuse le build (dépendance implicite non déclarée entre tâches).
+// KSP tasks are not KotlinCompile but read the same generated directory, and Gradle rejects the
+// build over the undeclared dependency.
 tasks.matching { it.name.startsWith("ksp") }.configureEach {
     dependsOn(generateEnvironmentConfig)
 }
@@ -147,8 +146,6 @@ compose.desktop {
 
         mainClass = "MainKt"
 
-        // ponytail: était "0.0.1" en dur alors qu'Android en est à 0.7.85. Source unique dans
-        // gradle.properties, surchargeable en CI par -PriplayVersion=<x.y.z> pour les tags.
         version = riplayVersion
         group = "riplay"
 
@@ -160,18 +157,15 @@ compose.desktop {
             packageName = "RiPlay"
             packageVersion = riplayVersion
 
-            // ponytail: bloc réactivé. Il était commenté et pointait vers un répertoire absent —
-            // le décommenter tel quel cassait le build. Les icônes sont maintenant versionnées,
-            // générées depuis assets/design/latest/app_icon.svg (voir desktop-icons/README.md).
-            // macOS volontairement omis : pas de cible mac, donc pas de .icns à maintenir.
+            // jpackage needs raster icons; see desktop-icons/README.md to regenerate them.
+            // No macOS entry: not a build target, so no .icns to keep around.
             val iconsRoot = project.file("desktop-icons")
             windows {
                 iconFile.set(iconsRoot.resolve("icon-windows.ico"))
             }
             linux {
                 iconFile.set(iconsRoot.resolve("icon-linux.png"))
-                // Sans ça le .desktop sort avec Categories=Unknown et l'app n'atterrit
-                // dans aucune section du menu d'applications.
+                // Without this the .desktop entry gets Categories=Unknown.
                 menuGroup = "Audio"
             }
         }
@@ -257,12 +251,14 @@ kotlin {
             implementation(libs.material.icon.desktop)
             implementation(libs.vlcj)
 
-            // ponytail: était "win" en dur, donc rien ne buildait hors Windows.
-            // Classifier JavaFX déduit de l'OS qui build. Pour cross-compiler, forcer -PfxSuffix=win|linux|mac.
+            // JavaFX ships per-platform artifacts and was hardcoded to "win". Apple Silicon needs
+            // mac-aarch64, plain "mac" pulls Intel binaries. Cross-compile with -PfxSuffix=<suffix>.
             val os = System.getProperty("os.name").lowercase()
+            val arch = System.getProperty("os.arch").lowercase()
             val fxSuffix = (project.findProperty("fxSuffix") as String?) ?: when {
                 os.contains("win") -> "win"
-                os.contains("mac") -> "mac"
+                os.contains("mac") -> if (arch == "aarch64") "mac-aarch64" else "mac"
+                arch == "aarch64" -> "linux-aarch64"
                 else -> "linux"
             }
             implementation("org.openjfx:javafx-base:21.0.5:${fxSuffix}")
@@ -277,9 +273,8 @@ kotlin {
 
         }
 
-        // ponytail: remplace le bloc commenté "uncomment for desktop / comment for android".
-        // Scopé aux configurations du target jvm au lieu de commonMainApi : plus besoin de
-        // commenter/décommenter entre un build desktop et un build android.
+        // Scoped to the jvm target rather than commonMainApi, so desktop and android builds no
+        // longer need this block commented in and out.
         listOf("jvmCompileClasspath", "jvmRuntimeClasspath").forEach { name ->
             configurations.named(name) {
                 exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-android")
@@ -361,21 +356,19 @@ room {
     generateKotlin = true
 }
 
-// ponytail: vérifie la résolution d'URL de flux sans lancer l'UI.
-//   ./gradlew :composeApp:checkStreamUrl [-PvideoId=<id>]
+// ./gradlew :composeApp:checkStreamUrl [-PvideoId=<id>]
 tasks.register<JavaExec>("checkStreamUrl") {
     group = "verification"
-    description = "Résout une URL de flux audio YouTube et vérifie qu'elle est réellement jouable"
+    description = "Resolves a YouTube audio stream URL and checks it is actually playable"
     val jvmMain = kotlin.jvm().compilations.getByName("main")
     classpath = files(jvmMain.output.allOutputs, jvmMain.runtimeDependencyFiles)
     mainClass.set("it.fast4x.riplay.player.StreamUrlCheckKt")
     (project.findProperty("videoId") as String?)?.let { args(it) }
 }
 
-// ponytail: le bloc dependencies d'origine (juste en dessous) est commenté en entier, donc Room
-// n'avait aucun compilateur KSP enregistré et ne générait rien. On ne réactive que le strict
-// nécessaire, sans les flavors ni le desugaring qui sont probablement la cause du commentaire.
-// Le target KMP s'appelle "jvm" : la config est donc kspJvm, pas kspDesktop qui n'existe pas.
+// The dependencies block below is commented out in full, leaving Room without a KSP compiler.
+// Only the necessary part is restored here. The KMP target is named "jvm", so the configuration
+// is kspJvm — kspDesktop, as the original block had it, matches nothing.
 dependencies {
     add("kspAndroid", libs.room.compiler)
     add("kspJvm", libs.room.compiler)

@@ -10,28 +10,25 @@ import java.net.HttpURLConnection
 import java.net.URI
 
 /**
- * Vérification autonome de [resolveAudioStreamUrl], sans lancer l'interface.
+ * Standalone check for [resolveAudioStreamUrl], without starting the UI:
  *
- *   ./gradlew :composeApp:checkStreamUrl -PvideoId=<id>
+ *     ./gradlew :composeApp:checkStreamUrl -PvideoId=<id>
  *
- * Le déchiffrement de signature est la partie la plus fragile de la chaîne (YouTube la change
- * plusieurs fois par an) et elle échoue silencieusement : on récupère une URL d'apparence normale
- * qui renvoie 403. D'où la requête réelle en fin de check plutôt qu'un simple test de non-nullité.
+ * It fetches the stream rather than just asserting a non-null URL, because a stale signature
+ * yields a normal looking URL that answers 403.
  */
 fun main(args: Array<String>) = runBlocking {
-    // "dQw4w9WgXcQ" par défaut : une vidéo publique, sans restriction d'âge ni de région.
     val videoId = args.firstOrNull() ?: "dQw4w9WgXcQ"
 
     initializeEnvironment()
 
     probeClients(videoId)
 
-    println("Résolution de $videoId ...")
+    println("Resolving $videoId ...")
     val url = resolveAudioStreamUrl(videoId)
-    check(url != null) { "ECHEC: aucune URL résolue pour $videoId" }
-    println("URL obtenue (${url.length} caractères): ${url.take(120)}...")
+    check(url != null) { "FAILED: no URL resolved for $videoId" }
+    println("Got URL (${url.length} chars): ${url.take(120)}...")
 
-    // Range 0-1 : on veut le code de retour et le type, pas le fichier.
     val connection = (URI(url).toURL().openConnection() as HttpURLConnection).apply {
         requestMethod = "GET"
         setRequestProperty("Range", "bytes=0-1")
@@ -44,21 +41,13 @@ fun main(args: Array<String>) = runBlocking {
     connection.disconnect()
 
     println("HTTP $status, Content-Type: $contentType")
-    check(status == 200 || status == 206) {
-        "ECHEC: le flux répond $status — signature probablement mal déchiffrée"
-    }
-    check(contentType.startsWith("audio/")) {
-        "ECHEC: Content-Type '$contentType', un flux audio était attendu"
-    }
+    check(status == 200 || status == 206) { "FAILED: stream answered $status, signature likely stale" }
+    check(contentType.startsWith("audio/")) { "FAILED: got '$contentType', expected an audio stream" }
 
-    println("OK: flux audio jouable.")
+    println("OK: audio stream is playable.")
 }
 
-/**
- * Diagnostic : pour chaque client YouTube connu, dit si les formats audio arrivent avec une URL
- * directe ou un signatureCipher. Un client à URL directe évite tout le déchiffrement de signature,
- * qui est la partie fragile de la chaîne.
- */
+/** Reports which clients hand out direct URLs and which require signature deciphering. */
 @OptIn(ExperimentalSerializationApi::class)
 private suspend fun probeClients(videoId: String) {
     val clients = listOf(
@@ -77,8 +66,8 @@ private suspend fun probeClients(videoId: String) {
         val format = player?.streamingData?.autoMaxQualityFormat
         println(
             "  $label (${client.clientName}/${client.clientVersion}): " +
-                    "statut=${player?.playabilityStatus?.status} itag=${format?.itag} " +
-                    "urlDirecte=${format?.url != null} cipher=${format?.signatureCipher != null}"
+                    "status=${player?.playabilityStatus?.status} itag=${format?.itag} " +
+                    "directUrl=${format?.url != null} cipher=${format?.signatureCipher != null}"
         )
     }
 }

@@ -71,11 +71,8 @@ object NewPipeUtils {
     }
 
     /**
-     * Transforme un [PlayerResponse.StreamingData.Format] en URL réellement jouable.
-     *
-     * Deux obstacles côté YouTube : soit l'URL est fournie telle quelle, soit elle arrive sous forme
-     * de `signatureCipher` dont la signature doit être déchiffrée. Dans les deux cas le paramètre `n`
-     * doit ensuite être déchiffré lui aussi, faute de quoi YouTube bride le débit à ~50 ko/s.
+     * Turns a format into a playable URL. YouTube either hands out the URL directly or wraps it in
+     * a `signatureCipher` that has to be deciphered first.
      */
     fun getStreamUrl(
         format: PlayerResponse.StreamingData.Format,
@@ -86,17 +83,16 @@ object NewPipeUtils {
                 .mapNotNull { it.split("=", limit = 2).takeIf { p -> p.size == 2 } }
                 .associate { (k, v) -> k to URLDecoder.decode(v, "UTF-8") }
 
-            val baseUrl = params["url"] ?: error("signatureCipher sans paramètre url")
-            val obfuscated = params["s"] ?: error("signatureCipher sans paramètre s")
+            val baseUrl = params["url"] ?: error("signatureCipher has no url parameter")
+            val obfuscated = params["s"] ?: error("signatureCipher has no s parameter")
             val sigParam = params["sp"] ?: "signature"
             val signature = YoutubeJavaScriptPlayerManager.deobfuscateSignature(videoId, obfuscated)
 
             "$baseUrl&$sigParam=$signature"
-        } ?: error("Format sans url ni signatureCipher (itag ${format.itag})")
+        } ?: error("Format has neither url nor signatureCipher (itag ${format.itag})")
 
-        // Le déchiffrement du paramètre `n` casse dès que YouTube modifie son player JS. Sans lui on
-        // récupère quand même un flux jouable, simplement bridé — c'est très préférable à ne rien
-        // jouer du tout. On ne laisse donc pas cet échec-là condamner une URL par ailleurs valide.
+        // Deciphering the `n` parameter breaks whenever YouTube changes its player JS. Skipping it
+        // only throttles the stream to ~50 KB/s, which beats not playing at all.
         runCatching {
             YoutubeJavaScriptPlayerManager.getUrlWithThrottlingParameterDeobfuscated(videoId, url)
         }.getOrElse { url }

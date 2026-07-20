@@ -170,7 +170,7 @@ extensions.configure<ApplicationExtension> {
         targetSdk = 37
 
         versionCode = 92
-        // ponytail: source unique dans gradle.properties, partagée avec la cible desktop.
+        // Single source in gradle.properties, shared with the desktop target.
         versionName = providers.gradleProperty("riplayVersion").get()
 
 

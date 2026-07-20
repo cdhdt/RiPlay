@@ -111,8 +111,7 @@ fun PlaylistScreen(
         mutableStateOf(false)
     }
 
-    // ponytail: le fork rebelonion attend un OkHttpClient là où therealbush prenait un HttpClient
-    // Ktor. Son constructeur a une valeur par défaut, donc pas de client à fabriquer ici.
+    // The rebelonion fork takes an OkHttpClient, not a Ktor one, and defaults it.
     val translator = Translator()
     val languageDestination = languageDestination()
 
