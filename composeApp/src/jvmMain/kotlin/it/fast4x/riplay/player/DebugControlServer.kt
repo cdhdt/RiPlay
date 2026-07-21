@@ -3,7 +3,6 @@ package it.fast4x.riplay.player
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import kotlinx.coroutines.flow.MutableStateFlow
-import player.PlayerController
 import java.net.InetSocketAddress
 
 /**
@@ -19,8 +18,8 @@ object DebugControlServer {
 
     private const val PORT = 8777
 
-    /** Set by the UI so control commands reach the live controller. */
-    @Volatile var controller: PlayerController? = null
+    /** Set by the UI so control commands reach the live player. */
+    @Volatile var player: QueuePlayer? = null
 
     /** The UI collects this and applies it to its videoId, mirroring a song click end to end. */
     val requestedVideo = MutableStateFlow<String?>(null)
@@ -44,18 +43,26 @@ object DebugControlServer {
         val query = exchange.requestURI.query.orEmpty().split('&')
             .mapNotNull { it.split('=', limit = 2).takeIf { p -> p.size == 2 } }
             .associate { (k, v) -> k to v }
-        val c = controller
+        val p = player
 
         val body = when (path) {
-            "/state" -> c?.state?.value?.let {
-                """{"videoId":"${requestedVideo.value ?: ""}","playing":${it.isPlaying},""" +
-                    """"timestampMs":${it.timestamp},"durationMs":${it.duration},"volume":${it.volume},"muted":${it.isMuted}}"""
-            } ?: """{"error":"no controller"}"""
+            "/state" -> p?.let {
+                val s = it.playback.value
+                val q = it.queue.value
+                """{"videoId":"${q.current?.videoId ?: ""}","title":"${q.current?.title ?: ""}",""" +
+                    """"playing":${s.isPlaying},"timestampMs":${s.timestamp},"durationMs":${s.duration},""" +
+                    """"volume":${s.volume},"muted":${s.isMuted},"queueSize":${q.items.size},"index":${q.index},""" +
+                    """"shuffle":${q.shuffle},"repeat":"${q.repeat}"}"""
+            } ?: """{"error":"no player"}"""
             "/load" -> { query["v"]?.let { requestedVideo.value = it }; "ok ${query["v"]}" }
-            "/play" -> { c?.play(); "ok" }
-            "/pause" -> { c?.pause(); "ok" }
-            "/seek" -> { query["ms"]?.toLongOrNull()?.let { c?.seekTo(it) }; "ok" }
-            "/volume" -> { query["v"]?.toFloatOrNull()?.let { c?.setVolume(it) }; "ok" }
+            "/play" -> { p?.play(); "ok" }
+            "/pause" -> { p?.pause(); "ok" }
+            "/next" -> { p?.next(); "ok" }
+            "/prev" -> { p?.previous(); "ok" }
+            "/shuffle" -> { p?.toggleShuffle(); "ok" }
+            "/repeat" -> { p?.cycleRepeat(); "ok" }
+            "/seek" -> { query["ms"]?.toLongOrNull()?.let { p?.seekTo(it) }; "ok" }
+            "/volume" -> { query["v"]?.toFloatOrNull()?.let { p?.setVolume(it) }; "ok" }
             else -> "unknown: $path"
         }
 
