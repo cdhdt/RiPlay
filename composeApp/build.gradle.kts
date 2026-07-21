@@ -455,6 +455,7 @@ listOf(
     "checkStreamUrl" to "it.fast4x.riplay.player.StreamUrlCheckKt",
     "checkPlayback" to "it.fast4x.riplay.player.PlaybackCheckKt",
     "checkAppPath" to "it.fast4x.riplay.player.AppPathCheckKt",
+    "checkWebPlayback" to "it.fast4x.riplay.player.webview.WebPlaybackCheckKt",
 ).forEach { (taskName, entryPoint) ->
     tasks.register<JavaExec>(taskName) {
         group = "verification"
