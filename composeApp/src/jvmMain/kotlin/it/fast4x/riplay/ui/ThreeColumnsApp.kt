@@ -1,29 +1,15 @@
 package it.fast4x.riplay.ui
 
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredHeight
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.Tab
-import androidx.compose.material.TabRow
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -31,23 +17,19 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import database.MusicDatabaseDesktop
-import database.entities.Album
 import database.entities.Song
 import it.fast4x.environment.Environment
 import it.fast4x.riplay.enums.PageType
-import it.fast4x.riplay.styling.Dimensions.layoutColumnBottomPadding
-import it.fast4x.riplay.styling.Dimensions.layoutColumnBottomSpacer
-import it.fast4x.riplay.styling.Dimensions.layoutColumnTopPadding
-import it.fast4x.riplay.styling.Dimensions.layoutColumnsHorizontalPadding
-import it.fast4x.riplay.ui.components.MiniPlayer
+import it.fast4x.riplay.player.DebugControlServer
+import it.fast4x.riplay.player.QueueItem
+import it.fast4x.riplay.player.QueuePlayer
+import it.fast4x.riplay.player.webview.CefPlayerController
+import it.fast4x.riplay.player.webview.CefRuntime
 import it.fast4x.riplay.ui.pages.AlbumsPage
 import it.fast4x.riplay.ui.pages.SongsPage
 import it.fast4x.riplay.ui.screens.AlbumScreen
@@ -55,31 +37,17 @@ import it.fast4x.riplay.ui.screens.ArtistScreen
 import it.fast4x.riplay.ui.screens.MoodScreen
 import it.fast4x.riplay.ui.screens.PlaylistScreen
 import it.fast4x.riplay.ui.screens.QuickPicsScreen
+import it.fast4x.riplay.ui.spotify.NavSection
+import it.fast4x.riplay.ui.spotify.RiPlayColors
+import it.fast4x.riplay.ui.spotify.SpotifyShell
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import org.jetbrains.compose.resources.painterResource
-import player.frame.FrameContainer
-import riplay.composeapp.generated.resources.Res
-import riplay.composeapp.generated.resources.album
-import riplay.composeapp.generated.resources.app_icon
-import riplay.composeapp.generated.resources.app_logo_text
-import riplay.composeapp.generated.resources.artists
-import riplay.composeapp.generated.resources.library
-import riplay.composeapp.generated.resources.musical_notes
-import it.fast4x.riplay.player.vlcj.VlcjFrameController
-import kotlinx.coroutines.withContext
-import it.fast4x.riplay.player.webview.CefRuntime
-import it.fast4x.riplay.player.DebugControlServer
-import it.fast4x.riplay.player.QueuePlayer
-import it.fast4x.riplay.player.webview.CefPlayerController
-
 
 @Composable
 fun ThreeColumnsApp() {
 
     val db = remember { MusicDatabaseDesktop }
-
     val coroutineScope by remember { mutableStateOf(CoroutineScope(Dispatchers.IO)) }
 
     var videoId by remember { mutableStateOf("") }
@@ -93,11 +61,12 @@ fun ThreeColumnsApp() {
     // extraction which 403s on label content. Initialized off the UI thread; the controller exists
     // only once the ~150 MB runtime is ready.
     val cefStatus by CefRuntime.state.collectAsState()
-    LaunchedEffect(Unit) { withContext(Dispatchers.IO) { CefRuntime.ensureInitialized() } }
+    LaunchedEffect(Unit) { kotlinx.coroutines.withContext(Dispatchers.IO) { CefRuntime.ensureInitialized() } }
     val player = remember(cefStatus) {
         if (cefStatus == CefRuntime.Status.READY) QueuePlayer(CefPlayerController()) else null
     }
 
+    // Debug/HTTP path only: DebugControlServer pushes a videoId, we load it (metadata-less).
     LaunchedEffect(videoId, player) {
         if (videoId.isEmpty() || player == null) return@LaunchedEffect
         nowPlayingSong = db.getSong(videoId)
@@ -113,568 +82,132 @@ fun ThreeColumnsApp() {
         DebugControlServer.requestedVideo.collect { requested -> requested?.let { videoId = it } }
     }
 
-    /*
-    val formatAudio = body.value?.streamingData?.adaptiveFormats
-        ?.filter { it.isAudio }
-        ?.maxByOrNull {
-            it.bitrate?.times( (if (it.mimeType.startsWith("audio/webm")) 100 else 1)
-            ) ?: -1 }
-
-     */
-
-
-    /*
-    val formatVideo = body.value?.streamingData?.adaptiveFormats
-        ?.filter { it.isVideo }
-        ?.maxByOrNull {
-            it.bitrate?.times( (if (it.mimeType.startsWith("video/mp4")) 100 else 1)
-            ) ?: -1 }
-    */
-
-
-    //val urlAudio by remember { mutableStateOf(formatAudio.value?.url ?: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4") }
-    //var urlVideo by remember { mutableStateOf(formatVideo?.url ?: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4") }
-    //val url by remember { mutableStateOf(formatAudio.value?.url) }
-
-    //val url =  formatAudio.value?.url //"https://rr4---sn-hpa7znzr.googlevideo.com/videoplayback?expire=1727471735&ei=Fsz2ZoyiPO7Si9oPpreTiAI&ip=178.19.172.167&id=o-ABmCff7qCeQd05V_WN5fpAFEfxHP3kxR6G55H_QdlBsh&itag=251&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&mh=43&mm=31%2C26&mn=sn-hpa7znzr%2Csn-4g5lznez&ms=au%2Conr&mv=m&mvi=4&pl=22&gcr=it&initcwndbps=2505000&vprv=1&svpuc=1&mime=audio%2Fwebm&rqh=1&gir=yes&clen=3291443&dur=194.901&lmt=1714829870710563&mt=1727449746&fvip=4&keepalive=yes&fexp=51299152&c=ANDROID_MUSIC&txp=2318224&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cgcr%2Cvprv%2Csvpuc%2Cmime%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AJfQdSswRQIhAP5IS0unA9IAhtAtkqY-63FGyG_eRi-FMMgNjWU1TWGzAiACd3c4niMxsPxXjp_55EylpIBysVBOpoD69oQ9xvF8bg%3D%3D&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=ABPmVW0wRAIgZBP07jXYZ5_4xSrp_hZ9jvIOMPsfOa-grREDshQvzSYCIC7ImmFVJCeLUMVASEkedlXa-R4je3RVC_fu2WH8XTvj"
-
-    //var url by remember { mutableStateOf(urlVideo) }
-
-    var showPageSheet by remember { mutableStateOf(false) }
     var showPageType by remember { mutableStateOf(PageType.QUICKPICS) }
+    var activeSection by remember { mutableStateOf(NavSection.HOME) }
 
-    //println("songs in db ${MusicDatabaseDesktop.getAllSongs()}")
+    // Clicking a song plays it now with full metadata so the now-playing bar has cover/title/artist.
+    fun playSong(song: Song) {
+        player?.playNow(listOf(QueueItem(song.id, song.title, song.artistsText, song.thumbnailUrl)))
+        coroutineScope.launch { db.upsert(song) }
+    }
 
-    //val backStackEntry by navController.currentBackStackEntryAsState()
-    //val currentScreen = backStackEntry?.destination?.route ?: "artists"
-
-    Scaffold(
-        containerColor = Color.Black,
-        contentColor = Color.Gray,
-        topBar = {
-            /*
-            DesktopTopAppBar(
-                currentScreen = currentScreen,
-                canNavigateBack = navController.previousBackStackEntry != null,
-                navigateUp = { navController.navigateUp() }
-            )
-             */
+    SpotifyShell(
+        player = player,
+        activeSection = activeSection,
+        onSelectSection = { section ->
+            activeSection = section
+            showPageType = PageType.QUICKPICS // leave any deep page
         },
-        bottomBar = {
-            if (videoId.isNotEmpty() && player != null) {
-                MiniPlayer(
-                    controller = player,
-                    song = nowPlayingSong,
-                    onExpandAction = { showPageSheet = true }
+    ) {
+        when {
+            showPageType == PageType.ALBUM -> ScrollContent {
+                AlbumScreen(
+                    browseId = albumId,
+                    onSongClick = ::playSong,
+                    onAlbumClick = { albumId = it; showPageType = PageType.ALBUM },
+                )
+            }
+
+            showPageType == PageType.ARTIST -> ScrollContent {
+                ArtistScreen(
+                    browseId = artistId,
+                    onSongClick = ::playSong,
+                    onPlaylistClick = { playlistId = it; showPageType = PageType.PLAYLIST },
+                    onViewAllAlbumsClick = {},
+                    onViewAllSinglesClick = {},
+                    onAlbumClick = { albumId = it; showPageType = PageType.ALBUM },
+                    onClosePage = { showPageType = PageType.QUICKPICS },
+                )
+            }
+
+            showPageType == PageType.PLAYLIST -> ScrollContent {
+                PlaylistScreen(
+                    browseId = playlistId,
+                    onSongClick = ::playSong,
+                    onAlbumClick = { albumId = it; showPageType = PageType.ALBUM },
+                    onClosePage = { showPageType = PageType.QUICKPICS },
+                )
+            }
+
+            showPageType == PageType.MOOD -> ScrollContent {
+                mood?.let {
+                    MoodScreen(
+                        mood = it,
+                        onAlbumClick = { id -> albumId = id; showPageType = PageType.ALBUM },
+                        onArtistClick = { id -> artistId = id; showPageType = PageType.ARTIST },
+                        onPlaylistClick = { id -> playlistId = id; showPageType = PageType.PLAYLIST },
+                    )
+                }
+            }
+
+            activeSection == NavSection.LIBRARY -> LibraryContent(
+                onSongClick = ::playSong,
+                onAlbumClick = { albumId = it.id; showPageType = PageType.ALBUM },
+            )
+
+            activeSection == NavSection.SEARCH -> ScrollContent {
+                Text(
+                    "Recherche — bientôt disponible",
+                    color = RiPlayColors.textSecondary,
+                    fontSize = 16.sp,
+                )
+            }
+
+            else -> ScrollContent { // HOME / QUICKPICS
+                QuickPicsScreen(
+                    onSongClick = ::playSong,
+                    onAlbumClick = { albumId = it; showPageType = PageType.ALBUM },
+                    onArtistClick = { artistId = it; showPageType = PageType.ARTIST },
+                    onPlaylistClick = { playlistId = it; showPageType = PageType.PLAYLIST },
+                    onMoodClick = { mood = it; showPageType = PageType.MOOD },
                 )
             }
         }
-    ) { innerPadding ->
-
-        ThreeColumnsLayout(
-            /*
-            onSongClick = {
-                videoId.value = it
-            },
-            onArtistClick = {
-                artistId.value = it
-                showPageType = PageType.ARTIST
-                showPageSheet = true
-            },
-            onAlbumClick = {
-                albumId.value = it
-                showPageType = PageType.ALBUM
-                showPageSheet = true
-            },
-            onPlaylistClick = {},
-             */
-            onHomeClick = { showPageType = PageType.QUICKPICS },
-            onSongClick = {
-                //it's just in db, no need to insert
-                videoId = it.id
-                println("ThreeColumnsApp onSongClick videoId $videoId")
-            },
-            onAlbumClick = {
-                albumId = it.id
-                showPageType = PageType.ALBUM
-                showPageSheet = true
-            },
-            centerPanelContent = {
-                when (showPageType) {
-                    PageType.ALBUM -> {
-                        AlbumScreen(
-                            browseId = albumId,
-                            onSongClick = {
-                                videoId = it.id
-                                coroutineScope.launch {
-                                    db.upsert(it)
-                                }
-                            },
-                            onAlbumClick = {
-                                albumId = it
-                                showPageType = PageType.ALBUM
-                                showPageSheet = true
-                            }
-                        )
-                    }
-
-                    PageType.ARTIST -> {
-                        ArtistScreen(
-                            browseId = artistId,
-                            onSongClick = {
-                                videoId = it.id
-                                coroutineScope.launch {
-                                    db.upsert(it)
-                                }
-                            },
-                            onPlaylistClick = {
-                                playlistId = it
-                                showPageType = PageType.PLAYLIST
-                                showPageSheet = true
-                            },
-                            onViewAllAlbumsClick = {},
-                            onViewAllSinglesClick = {},
-                            onAlbumClick = {
-                                albumId = it
-                                showPageType = PageType.ALBUM
-                                showPageSheet = true
-                            },
-                            onClosePage = { showPageSheet = false }
-                        )
-                    }
-
-                    PageType.PLAYLIST -> {
-                        PlaylistScreen(
-                            browseId = playlistId,
-                            onSongClick = {
-                                videoId = it.id
-                                coroutineScope.launch {
-                                    db.upsert(it)
-                                }
-                            },
-                            onAlbumClick = {
-                                albumId = it
-                                showPageType = PageType.ALBUM
-                                showPageSheet = true
-                            },
-                            onClosePage = { showPageSheet = false }
-                        )
-                    }
-
-                    PageType.MOOD -> {
-                        mood?.let {
-                            MoodScreen(
-                                mood = it,
-                                onAlbumClick = { id ->
-                                    albumId = id
-                                    showPageType = PageType.ALBUM
-                                    showPageSheet = true
-                                },
-                                onArtistClick = { id ->
-                                    artistId = id
-                                    showPageType = PageType.ARTIST
-                                    showPageSheet = true
-                                },
-                                onPlaylistClick = { id ->
-                                    playlistId = id
-                                    showPageType = PageType.PLAYLIST
-                                    showPageSheet = true
-                                }
-                            )
-                        }
-                    }
-
-                    PageType.QUICKPICS -> {
-                        QuickPicsScreen(
-                            onSongClick = {
-                                videoId = it.id
-                                coroutineScope.launch {
-                                    db.upsert(it)
-                                }
-                                println("ThreeColumnsApp onSongClick videoId $videoId")
-                            },
-                            onAlbumClick = {
-                                albumId = it
-                                showPageType = PageType.ALBUM
-                                showPageSheet = true
-                            },
-                            onArtistClick = {
-                                artistId = it
-                                showPageType = PageType.ARTIST
-                                showPageSheet = true
-                            },
-                            onPlaylistClick = {
-                                playlistId = it
-                                showPageType = PageType.PLAYLIST
-                                showPageSheet = true
-                            },
-                            onMoodClick = {
-                                mood = it
-                                showPageType = PageType.MOOD
-                                showPageSheet = true
-                            }
-                        )
-                    }
-
-                    else -> {}
-                }
-            }
-        )
-
-        /*
-        AnimatedVisibility(
-            visible = showPageSheet,
-            enter = expandIn(animationSpec = tween(350, easing = LinearOutSlowInEasing), expandFrom = Alignment.TopStart),
-            exit =  shrinkOut(animationSpec = tween(350, easing = FastOutSlowInEasing),shrinkTowards = Alignment.TopStart)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color.Black)
-                    .padding(innerPadding),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.SpaceBetween,
-            ) {
-                when(showPageType){
-                    PageType.ALBUM -> {
-                        AlbumScreen(
-                            browseId = albumId.value,
-                            onSongClick = {
-                                videoId.value = it
-                            },
-                            onAlbumClick = {
-                                albumId.value = it
-                                showPageType = PageType.ALBUM
-                                showPageSheet = true
-                            },
-                            onClosePage = { showPageSheet = false }
-                        )
-                    }
-                    PageType.ARTIST -> {
-                        ArtistScreen(
-                            browseId = artistId.value,
-                            onSongClick = {
-                                videoId.value = it
-                            },
-                            onPlaylistClick = {},
-                            onViewAllAlbumsClick = {},
-                            onViewAllSinglesClick = {},
-                            onAlbumClick = {
-                                albumId.value = it
-                                showPageType = PageType.ALBUM
-                                showPageSheet = true
-                            },
-                            onClosePage = { showPageSheet = false }
-                        )
-                    }
-                    PageType.PLAYLIST -> {}
-                    PageType.MOOD -> {}
-                    else -> {}
-                }
-            }
-        }
-        */
-        /*
-        CustomModalBottomSheet(
-            showSheet = showPageSheet,
-            onDismissRequest = { showPageSheet = false },
-            containerColor = Color.Black,
-            contentColor = Color.White,
-            modifier = Modifier.fillMaxWidth(),
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            dragHandle = {
-                Surface(
-                    modifier = Modifier.padding(vertical = 0.dp),
-                    color =Color.Black,
-                    shape = ThumbnailRoundness.Medium.shape()
-                ) {}
-            },
-            shape = ThumbnailRoundness.Medium.shape()
-        ) {
-            when(showPageType){
-                PageType.ALBUM -> {}
-                PageType.ARTIST -> {
-                    ArtistScreen(
-                        browseId = artistId.value,
-                        onSongClick = {
-                            videoId.value = it
-                        },
-                        onPlaylistClick = {},
-                        onViewAllAlbumsClick = {},
-                        onViewAllSinglesClick = {},
-                        onAlbumClick = {},
-                        onClosePage = { showPageSheet = false }
-                    )
-                }
-                PageType.PLAYLIST -> {}
-                PageType.MOOD -> {}
-                else -> {}
-            }
-
-        }
-         */
     }
 }
 
+/** Vertical-scroll container matching the old CenterPanelContent so the reused screens behave. */
 @Composable
-fun ThreeColumnsLayout(
-    /*
-
-   onArtistClick: (key: String) -> Unit = {},
-   onAlbumClick: (key: String) -> Unit = {},
-   onPlaylistClick: (key: String) -> Unit = {},
-   onMoodClick: (mood: Innertube.Mood.Item) -> Unit = {},
-     */
-    onHomeClick: () -> Unit = {},
-    onSongClick: (Song) -> Unit = {},
-    onAlbumClick: (Album) -> Unit = {},
-    centerPanelContent: @Composable () -> Unit = {}
-) {
-    Row(Modifier.fillMaxSize()) {
-        RightPanelContent(
-            onShowPlayer = {}
-        ) {
-            // Audio-only: playback lives in the hidden CEF browser, so the right panel no longer
-            // renders a VLC video frame here.
-        }
-
-        VerticalDivider(
-            modifier = Modifier
-                .fillMaxHeight()
-                .width(1.dp),
-            color = Color.Gray.copy(alpha = 0.6f)
-        )
-        CenterPanelContent(
-            onHomeClick = onHomeClick,
-            content = {
-                centerPanelContent()
-            }
-        )
-        VerticalDivider(
-            modifier = Modifier
-                .fillMaxHeight()
-                .width(1.dp),
-            color = Color.Gray.copy(alpha = 0.6f)
-        )
-        LeftPanelContent(
-            onSongClick = onSongClick,
-            onAlbumClick = onAlbumClick
-        )
-
-    }
-}
-
-@Composable
-fun LeftPanelContent(
-    onSongClick: (Song) -> Unit = {},
-    onAlbumClick: (Album) -> Unit = {}
-) {
+private fun ScrollContent(content: @Composable () -> Unit) {
     Column(
-        verticalArrangement = Arrangement.Top,
-        horizontalAlignment = Alignment.Start,
-        modifier = Modifier
-            .fillMaxSize() // right
-           // .fillMaxHeight() //left
-           // .fillMaxWidth(0.23f) //left
-            .padding(horizontal = layoutColumnsHorizontalPadding)
-            .padding(top = layoutColumnTopPadding)
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 24.dp)
+            .padding(top = 8.dp, bottom = 32.dp),
     ) {
-        val (currentTabIndex, setCurrentTabIndex) = remember { mutableStateOf(0) }
-        TabRow(
-            currentTabIndex,
-            modifier = Modifier
-                .height(36.dp)
-                .fillMaxWidth(),
-            backgroundColor = Color.Gray.copy(alpha = 0.2f),
-            contentColor = Color.White.copy(alpha = 0.6f)
-        ) {
-            Tab(
-                currentTabIndex == 0,
-                onClick = { setCurrentTabIndex(0) },
-                text = {
-                    //Text("")
-                },
-                icon = {
-                    Image(
-                        painter = painterResource(Res.drawable.musical_notes),
-                        colorFilter = ColorFilter.tint(Color.White.copy(alpha = 0.6f)),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(20.dp)
-                    )
-                }
-
-            )
-            Tab(
-                currentTabIndex == 1,
-                onClick = { setCurrentTabIndex(1) },
-                text = {
-                    //Text("")
-                },
-                icon = {
-                    Image(
-                        painter = painterResource(Res.drawable.artists),
-                        colorFilter = ColorFilter.tint(Color.White.copy(alpha = 0.6f)),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(20.dp)
-                    )
-                }
-            )
-            Tab(
-                currentTabIndex == 2,
-                onClick = { setCurrentTabIndex(2) },
-                text = {
-                    //Text("")
-                },
-                icon = {
-                    Image(
-                        painter = painterResource(Res.drawable.album),
-                        colorFilter = ColorFilter.tint(Color.White.copy(alpha = 0.6f)),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(20.dp)
-                    )
-                }
-            )
-            Tab(
-                currentTabIndex == 3,
-                onClick = { setCurrentTabIndex(3) },
-                text = {
-                    //Text("")
-                },
-                icon = {
-                    Image(
-                        painter = painterResource(Res.drawable.library),
-                        colorFilter = ColorFilter.tint(Color.White.copy(alpha = 0.6f)),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(20.dp)
-                    )
-                }
-            )
-
-        }
-
-        when (currentTabIndex) {
-            0 -> SongsPage(
-                onSongClick = onSongClick
-            )
-            1 -> {}
-            2 -> {
-                AlbumsPage(
-                    onAlbumClick = onAlbumClick
-                )
-            }
-            3 -> {}
-        }
-
+        content()
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+/** Basic library view (reuses existing DB-backed pages). ponytail: two tabs, no search/sort yet. */
 @Composable
-fun CenterPanelContent(
-    onHomeClick: () -> Unit = {},
-    content: @Composable () -> Unit
+private fun LibraryContent(
+    onSongClick: (Song) -> Unit,
+    onAlbumClick: (database.entities.Album) -> Unit,
 ) {
-    val scrollState = rememberScrollState()
-    Column(
-        verticalArrangement = Arrangement.Top,
-        horizontalAlignment = Alignment.Start,
-        modifier = Modifier
-            .fillMaxHeight()
-            .fillMaxWidth(0.7f)
-            .padding(horizontal = layoutColumnsHorizontalPadding)
-            .padding(top = layoutColumnTopPadding)
-            .padding(bottom = layoutColumnBottomPadding)
-            .verticalScroll(scrollState)
-    ) {
-
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
-            verticalAlignment = Alignment.Top
-        ) {
-            Image(
-                painter = painterResource(Res.drawable.app_icon),
-                colorFilter = ColorFilter.tint(Color.Green.copy(alpha = 0.6f)),
-                contentDescription = null,
-                modifier = Modifier
-                    .size(36.dp)
-                    .combinedClickable(
-                        onClick = {},
-                        onLongClick = {}
-                    )
-            )
-            Text(
-                text = "Play",
-                color = Color.White,
-                fontSize = 25.sp,
-                modifier = Modifier.clickable {
-                    onHomeClick()
-                }
-            )
-//            Image(
-//                painter = painterResource(Res.drawable.app_logo_text),
-//                colorFilter = ColorFilter.tint(
-//                    Color.White
-//                    /*
-//                    when (colorPaletteMode) {
-//                        ColorPaletteMode.Light, ColorPaletteMode.System -> colorPalette.text
-//                        else -> Color.White
-//                    }
-//
-//                     */
-//                ),
-//                contentDescription = null,
-//                modifier = Modifier
-//                    .width(100.dp)
-//                    .clickable { onHomeClick() }
-//            )
+    var tab by remember { mutableStateOf(0) }
+    Column(Modifier.fillMaxSize().padding(horizontal = 24.dp).padding(top = 8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.padding(bottom = 12.dp)) {
+            LibraryTab("Titres", tab == 0) { tab = 0 }
+            LibraryTab("Albums", tab == 1) { tab = 1 }
         }
-
-        Column(Modifier.fillMaxSize().border(1.dp, color = Color.Black)) {
-
-            content()
-
-            Spacer(Modifier.height(layoutColumnBottomSpacer))
-
-
+        when (tab) {
+            0 -> SongsPage(onSongClick = onSongClick)
+            else -> AlbumsPage(onAlbumClick = onAlbumClick)
         }
-
     }
 }
 
-
 @Composable
-fun RightPanelContent(
-    onShowPlayer: (Boolean) -> Unit = {},
-    content: @Composable () -> Unit
-) {
-    var showPlayer by remember { mutableStateOf(false) }
-    Column(
-        verticalArrangement = Arrangement.Top,
-        horizontalAlignment = Alignment.Start,
+private fun LibraryTab(label: String, active: Boolean, onClick: () -> Unit) {
+    Text(
+        label,
+        color = if (active) RiPlayColors.textPrimary else RiPlayColors.textSecondary,
+        fontSize = 18.sp,
+        fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
         modifier = Modifier
-            //.fillMaxSize() //right
-            .fillMaxHeight() //left
-            .fillMaxWidth(0.23f) //left
-            .padding(horizontal = layoutColumnsHorizontalPadding)
-            .padding(top = layoutColumnTopPadding)
-    ) {
-        /*
-        Text(text = "Right Panel", modifier = Modifier.clickable {
-            showPlayer = !showPlayer
-            onShowPlayer(showPlayer)
-        })
-        Spacer(Modifier.size(20.dp))
-
-         */
-        Spacer(Modifier.size(layoutColumnTopPadding))
-        Row(
-            //Modifier.border(1.dp, color = Color.Yellow)
-        ) {
-            content()
-        }
-    }
+            .clickable(remember { MutableInteractionSource() }, indication = null) { onClick() }
+            .padding(4.dp),
+    )
 }
