@@ -462,6 +462,7 @@ listOf(
     "checkWebPlayback" to "it.fast4x.riplay.player.webview.WebPlaybackCheckKt",
     "checkWebMusic" to "it.fast4x.riplay.player.webview.WebMusicCheckKt",
     "checkCef" to "it.fast4x.riplay.player.webview.WebCefCheckKt",
+    "checkCefController" to "it.fast4x.riplay.player.webview.CefControllerCheckKt",
 ).forEach { (taskName, entryPoint) ->
     tasks.register<JavaExec>(taskName) {
         group = "verification"
@@ -478,7 +479,7 @@ listOf(
         if (project.hasProperty("preferIPv4")) jvmArgs("-Djava.net.preferIPv4Stack=true")
         if (project.hasProperty("riplay.debug")) systemProperty("riplay.debug", "true")
         // JCEF reaches into java.desktop internals; without these it fails to initialize.
-        if (taskName == "checkCef") jvmArgs(
+        if (taskName.startsWith("checkCef")) jvmArgs(
             "--add-opens", "java.desktop/sun.awt=ALL-UNNAMED",
             "--add-opens", "java.desktop/java.awt.peer=ALL-UNNAMED",
             "--add-opens", "java.base/java.lang=ALL-UNNAMED",
