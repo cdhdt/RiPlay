@@ -188,9 +188,10 @@ class QueuePlayer(private val audio: CefPlayerController) : PlayerController {
      */
     private fun maybeAutoAdvance(s: PlayerState) {
         val current = _queue.value.current ?: return
-        val duration = s.duration
-        if (duration <= 0) return
-        val nearEnd = s.timestamp >= duration - 1200
+        // Guard the transient at load, where duration briefly reads a tiny positive value with
+        // timestamp ~0: without requiring real progress, `timestamp >= duration - 1200` would be
+        // true immediately (duration - 1200 < 0) and fire the auto-advance/radio on every new track.
+        val nearEnd = s.timestamp > 0 && s.duration > 1200 && s.timestamp >= s.duration - 1200
         if (!nearEnd || advancedForVideoId == current.videoId) return
         advancedForVideoId = current.videoId
         when {
