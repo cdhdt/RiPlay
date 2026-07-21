@@ -150,6 +150,9 @@ compose.desktop {
         version = riplayVersion
         group = "riplay"
 
+        // `./gradlew :composeApp:run -Priplay.debug` turns on verbose playback logging (see Debug).
+        if (project.hasProperty("riplay.debug")) jvmArgs += "-Driplay.debug=true"
+
         nativeDistributions {
             vendor = "RiPlay"
             description = "RiPlay Desktop Music Player"
@@ -466,6 +469,7 @@ listOf(
         (project.findProperty("playSeconds") as String?)
             ?.let { systemProperty("playSeconds", it) }
         if (project.hasProperty("preferIPv4")) jvmArgs("-Djava.net.preferIPv4Stack=true")
+        if (project.hasProperty("riplay.debug")) systemProperty("riplay.debug", "true")
     }
 }
 

@@ -13,12 +13,14 @@ data class PlayerBody(
     val playbackContext: PlaybackContext? = null,
     val cpn: String? = "dPK7AEPTvFz8geNI",
     val params: String? = null,
-    val serviceIntegrityDimensions: ServiceIntegrityDimensions? = ServiceIntegrityDimensions(),
+    // Was a hardcoded, long-expired PO token sent on every request, which made YouTube answer
+    // LOGIN_REQUIRED for the ANDROID_VR client. A fresh token needs a JS runtime to generate, and
+    // ANDROID_VR needs none at all, so we simply send nothing. Pass one explicitly if ever needed.
+    val serviceIntegrityDimensions: ServiceIntegrityDimensions? = null,
 ) {
     @Serializable
     data class ServiceIntegrityDimensions(
-        val poToken: String =
-            "Mlt6vqPMnRAc93qGSJr4d9wyzWNClpcDwVQGZ7ooTJoc6IjxwPaMoyTMXRkU5OHQQvLdQqF4v9W_U6JRCUmCPatLIOlbBqjasxsmO3PnigwoLSQ81o0MpFeX8nJA",
+        val poToken: String,
     )
     @Serializable
     data class PlaybackContext(
