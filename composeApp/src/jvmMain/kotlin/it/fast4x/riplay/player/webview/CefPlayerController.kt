@@ -47,7 +47,10 @@ class CefPlayerController : PlayerController {
     // Chromium throttles/suspends a hidden or iconified window and the page then never plays.
     private val frame = JFrame().apply {
         isUndecorated = true
-        setSize(400, 300)
+        // Small: audio-only, so Chromium only has to paint a tiny surface — the SPA's album art and
+        // animations are pure waste here. It must stay visible and non-minimized, though, or
+        // Chromium suspends the media.
+        setSize(160, 120)
         // -Driplay.cefvisible keeps it on-screen for debugging whether off-screen breaks playback.
         if (System.getProperty("riplay.cefvisible") == null) setLocation(-4000, -4000)
         contentPane.add(browser.uiComponent)
@@ -104,80 +107,62 @@ class CefPlayerController : PlayerController {
         }
     }
 
-    /** Clears the consent interstitial when it appears, and mirrors the <video> into [state]. */
+    /**
+     * One JavaScript round trip per tick does everything — read state, skip ads, keep the page
+     * visible, and resume playback — instead of four separate calls, which was most of the idle CPU.
+     * Returns "href\nsnapshot\nflags"; consent is the rare exception handled with its own call.
+     */
     private suspend fun pollLoop() {
         var tick = 0
         while (true) {
-            delay(400)
-            val href = browser.evaluateJavaScript("String(location.href)") ?: continue
-            if (Debug.enabled && tick++ % 5 == 0) Debug.log("cef") { "href=${href.take(55)}" }
+            delay(POLL_INTERVAL_MS)
+            val result = browser.evaluateJavaScript(tickScript(desiredPlaying)) ?: continue
+            val parts = result.split('\n')
+            val href = parts.getOrElse(0) { "" }
+            val snapshot = parts.getOrElse(1) { "" }
+            if (Debug.enabled && tick++ % 4 == 0) Debug.log("cef") { "href=${href.take(45)} snap=[$snapshot] ${parts.getOrElse(2){""}}" }
 
-            if (href.contains("consent")) {
-                browser.evaluateJavaScript(
-                    "(function(){var b=document.querySelectorAll('button');for(var i=0;i<b.length;i++){" +
-                        "var t=(b[i].textContent||'').toLowerCase();" +
-                        "if(t.indexOf('accept')>=0||t.indexOf('accepter')>=0||t.indexOf('reject')>=0||t.indexOf('refuser')>=0){b[i].click();break;}}})()"
-                )
-                continue
-            }
+            if (href.contains("consent")) { clearConsent(); continue }
 
-            // Drive navigation here rather than in load(): re-issue loadURL until the page actually
-            // shows the requested track, which also covers switching tracks later.
+            // Drive navigation here rather than in load(): re-issue loadURL until the page shows the
+            // requested track, which also covers switching tracks later.
             val target = targetVideoId
             if (target != null && target != confirmedVideoId) {
                 if (href.contains("watch?v=$target")) confirmedVideoId = target
                 else browser.loadURL("https://music.youtube.com/watch?v=$target")
             }
 
-            // One round trip returns the whole player state as a compact string, to keep the JS
-            // bridge chatter down to a single call per tick.
-            val snapshot = browser.evaluateJavaScript(
-                "(function(){var v=document.querySelector('video');" +
-                    "return v?[v.currentTime,v.duration,v.paused?0:1,v.muted?1:0,v.volume].join(','):''})()"
-            ) ?: ""
             parseSnapshot(snapshot)
-            if (Debug.enabled && tick % 5 == 0) Debug.log("cef") { "snapshot=[$snapshot]" }
-
-            skipAdIfPresent()
-
-            // YouTube Music does not resume by itself after an ad, and off-screen it reports
-            // document.hidden=true and pauses. #movie_player is the underlying YouTube player and
-            // exposes the same API as the IFrame (playVideo/pauseVideo/seekTo) — far more reliable
-            // than the shadow-DOM play button, whose shadow root is not reachable here.
-            val paused = snapshot.isNotEmpty() && snapshot.split(',').getOrNull(2) == "0"
-            if (desiredPlaying && paused) {
-                val r = browser.evaluateJavaScript(
-                    "(function(){" +
-                        "try{Object.defineProperty(document,'hidden',{value:false,configurable:true});" +
-                        "Object.defineProperty(document,'visibilityState',{value:'visible',configurable:true});}catch(e){}" +
-                        "var v=document.querySelector('video');if(!v||!v.paused)return'notpaused';" +
-                        "var mp=document.getElementById('movie_player');" +
-                        "if(mp&&mp.playVideo){mp.playVideo();return'mp';}" +
-                        "if(v.play){v.play();}return'vplay';})()"
-                )
-                if (Debug.enabled) Debug.log("cef") { "play nudge: $r" }
-            }
         }
     }
 
-    /**
-     * Skips audio ads the way the mobile app does: when the YouTube HTML5 player marks an ad
-     * (ad-showing / video-ads / a skip button), fast-forward the ad video to its end so YouTube
-     * moves straight to the track. YouTube Music embeds the same player, so the same markers work.
-     */
-    private suspend fun skipAdIfPresent() {
-        val result = browser.evaluateJavaScript(
-            "(function(){var v=document.querySelector('video');if(!v)return'';" +
-                // On music.youtube.com the ad and the track share the same <video>. Seeking to the
-                // end skips the ad, but doing it to a real track would break it, so never touch a
-                // video longer than an ad (~90s) — the duration guard is the real safety net.
-                "if(!isFinite(v.duration)||v.duration<=0||v.duration>90)return'';" +
-                "var c=document.querySelector('.video-ads');" +
-                "var ad=(c&&c.childElementCount>0)||document.getElementsByClassName('ad-showing').length>0;" +
-                "if(ad){v.currentTime=v.duration-0.1;return'ad';}return'';})()"
+    private suspend fun clearConsent() {
+        browser.evaluateJavaScript(
+            "(function(){var b=document.querySelectorAll('button');for(var i=0;i<b.length;i++){" +
+                "var t=(b[i].textContent||'').toLowerCase();" +
+                "if(t.indexOf('accept')>=0||t.indexOf('accepter')>=0||t.indexOf('reject')>=0||t.indexOf('refuser')>=0){b[i].click();break;}}})()"
         )
-        if (!result.isNullOrEmpty()) Debug.log("cef") { "ad handled ($result)" }
     }
+
+    /**
+     * The whole per-tick script. It reads the <video> state and, in the same pass:
+     *  - skips ads (duration-guarded so a real track is never fast-forwarded — see the 90s check);
+     *  - while [desired] and paused, forces visibility (off-screen the page reports hidden and
+     *    pauses itself) and resumes via #movie_player, the underlying YouTube player API.
+     */
+    private fun tickScript(desired: Boolean): String =
+        "(function(desired){var out=location.href+'\\n';" +
+            "var v=document.querySelector('video');if(!v)return out+'\\n';" +
+            "var flag='';" +
+            "if(isFinite(v.duration)&&v.duration>0&&v.duration<=90){" +
+            "var c=document.querySelector('.video-ads');" +
+            "if((c&&c.childElementCount>0)||document.getElementsByClassName('ad-showing').length>0){v.currentTime=v.duration-0.1;flag='ad';}}" +
+            "if(desired&&v.paused){" +
+            "try{Object.defineProperty(document,'hidden',{value:false,configurable:true});" +
+            "Object.defineProperty(document,'visibilityState',{value:'visible',configurable:true});}catch(e){}" +
+            "var mp=document.getElementById('movie_player');if(mp&&mp.playVideo){mp.playVideo();}else{v.play();}flag=flag?flag+',play':'play';}" +
+            "var snap=[v.currentTime,v.duration,v.paused?0:1,v.muted?1:0,v.volume].join(',');" +
+            "return out+snap+'\\n'+flag;})($desired)"
 
     private fun parseSnapshot(snapshot: String) {
         val parts = snapshot.split(',')
@@ -193,5 +178,10 @@ class CefPlayerController : PlayerController {
                 volume = parts[4].toFloatOrNull() ?: it.volume,
             )
         }
+    }
+
+    private companion object {
+        // 800ms: a music seekbar does not need finer, and every tick is a JS round trip to Chromium.
+        const val POLL_INTERVAL_MS = 800L
     }
 }
