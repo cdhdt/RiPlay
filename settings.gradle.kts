@@ -30,6 +30,8 @@ dependencyResolutionManagement {
         maven( "https://androidx.dev/storage/compose-compiler/repository")
         maven("https://maven.pkg.jetbrains.space/kotlin/p/kotlin/dev")
         maven("https://maven.mozilla.org/maven2/")
+        // JCEF (via KCEF) pulls JOGL/JogAmp, which live here rather than on Maven Central.
+        maven("https://jogamp.org/deployment/maven/")
     }
 }
 

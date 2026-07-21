@@ -278,6 +278,10 @@ kotlin {
             implementation(libs.coil.network.okhttp)
             runtimeOnly(libs.kotlinx.coroutines.swing)
 
+            // Embedded Chromium (full MSE) — the only engine that plays YouTube on desktop. The
+            // ~150 MB CEF bundle is fetched at first run by KCEF, not via Maven.
+            implementation("dev.datlag:kcef:2025.03.23")
+
         }
 
         // Scoped to the jvm target rather than commonMainApi, so desktop and android builds no
@@ -457,6 +461,7 @@ listOf(
     "checkAppPath" to "it.fast4x.riplay.player.AppPathCheckKt",
     "checkWebPlayback" to "it.fast4x.riplay.player.webview.WebPlaybackCheckKt",
     "checkWebMusic" to "it.fast4x.riplay.player.webview.WebMusicCheckKt",
+    "checkCef" to "it.fast4x.riplay.player.webview.WebCefCheckKt",
 ).forEach { (taskName, entryPoint) ->
     tasks.register<JavaExec>(taskName) {
         group = "verification"
@@ -472,6 +477,12 @@ listOf(
             ?.let { systemProperty("playSeconds", it) }
         if (project.hasProperty("preferIPv4")) jvmArgs("-Djava.net.preferIPv4Stack=true")
         if (project.hasProperty("riplay.debug")) systemProperty("riplay.debug", "true")
+        // JCEF reaches into java.desktop internals; without these it fails to initialize.
+        if (taskName == "checkCef") jvmArgs(
+            "--add-opens", "java.desktop/sun.awt=ALL-UNNAMED",
+            "--add-opens", "java.desktop/java.awt.peer=ALL-UNNAMED",
+            "--add-opens", "java.base/java.lang=ALL-UNNAMED",
+        )
     }
 }
 
