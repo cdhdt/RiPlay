@@ -465,6 +465,7 @@ listOf(
             ?.let { systemProperty("compose.application.resources.dir", it) }
         (project.findProperty("playSeconds") as String?)
             ?.let { systemProperty("playSeconds", it) }
+        if (project.hasProperty("preferIPv4")) jvmArgs("-Djava.net.preferIPv4Stack=true")
     }
 }
 
