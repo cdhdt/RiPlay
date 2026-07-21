@@ -70,6 +70,7 @@ import riplay.composeapp.generated.resources.musical_notes
 import it.fast4x.riplay.player.vlcj.VlcjFrameController
 import kotlinx.coroutines.withContext
 import it.fast4x.riplay.player.webview.CefRuntime
+import it.fast4x.riplay.player.DebugControlServer
 import it.fast4x.riplay.player.webview.CefPlayerController
 
 
@@ -100,6 +101,15 @@ fun ThreeColumnsApp() {
         if (videoId.isEmpty() || player == null) return@LaunchedEffect
         nowPlayingSong = db.getSong(videoId)
         player.load(videoId)
+    }
+
+    // Development control surface (-Priplay.control): drive the player and read state over HTTP.
+    LaunchedEffect(player) {
+        DebugControlServer.controller = player
+        DebugControlServer.startIfEnabled()
+    }
+    LaunchedEffect(Unit) {
+        DebugControlServer.requestedVideo.collect { requested -> requested?.let { videoId = it } }
     }
 
     /*
