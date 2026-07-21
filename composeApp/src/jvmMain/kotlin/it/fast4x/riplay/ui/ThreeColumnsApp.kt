@@ -71,6 +71,7 @@ import it.fast4x.riplay.player.vlcj.VlcjFrameController
 import kotlinx.coroutines.withContext
 import it.fast4x.riplay.player.webview.CefRuntime
 import it.fast4x.riplay.player.DebugControlServer
+import it.fast4x.riplay.player.QueuePlayer
 import it.fast4x.riplay.player.webview.CefPlayerController
 
 
@@ -94,7 +95,7 @@ fun ThreeColumnsApp() {
     val cefStatus by CefRuntime.state.collectAsState()
     LaunchedEffect(Unit) { withContext(Dispatchers.IO) { CefRuntime.ensureInitialized() } }
     val player = remember(cefStatus) {
-        if (cefStatus == CefRuntime.Status.READY) CefPlayerController() else null
+        if (cefStatus == CefRuntime.Status.READY) QueuePlayer(CefPlayerController()) else null
     }
 
     LaunchedEffect(videoId, player) {
@@ -105,7 +106,7 @@ fun ThreeColumnsApp() {
 
     // Development control surface (-Priplay.control): drive the player and read state over HTTP.
     LaunchedEffect(player) {
-        DebugControlServer.controller = player
+        DebugControlServer.player = player
         DebugControlServer.startIfEnabled()
     }
     LaunchedEffect(Unit) {
