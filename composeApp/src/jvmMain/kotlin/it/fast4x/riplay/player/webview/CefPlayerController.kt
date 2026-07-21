@@ -137,6 +137,8 @@ class CefPlayerController : PlayerController {
             parseSnapshot(snapshot)
             if (Debug.enabled && tick % 5 == 0) Debug.log("cef") { "snapshot=[$snapshot]" }
 
+            skipAdIfPresent()
+
             // YouTube Music does not autoplay on load: nudge it while the user wants playback and the
             // video is present but paused. Also force the page to believe it is visible — off-screen
             // it reports document.hidden=true and YouTube Music pauses itself.
@@ -150,6 +152,28 @@ class CefPlayerController : PlayerController {
                 )
             }
         }
+    }
+
+    /**
+     * Skips audio ads the way the mobile app does: when the YouTube HTML5 player marks an ad
+     * (ad-showing / video-ads / a skip button), fast-forward the ad video to its end so YouTube
+     * moves straight to the track. YouTube Music embeds the same player, so the same markers work.
+     */
+    private suspend fun skipAdIfPresent() {
+        val result = browser.evaluateJavaScript(
+            "(function(){" +
+                // .video-ads is always in the DOM; it only holds an ad when it has children — the
+                // check the mobile app relies on. .ad-showing is set only while an ad plays.
+                "var c=document.querySelector('.video-ads');" +
+                "var adVideo=(c&&c.childElementCount>0)?c.querySelector('video'):null;" +
+                "if(adVideo&&isFinite(adVideo.duration)){adVideo.currentTime=adVideo.duration-0.1;return'ad';}" +
+                "if(document.getElementsByClassName('ad-showing').length>0){" +
+                "var m=document.querySelector('.html5-main-video,video');" +
+                "if(m&&isFinite(m.duration)){m.currentTime=m.duration-0.1;return'ad2';}}" +
+                "var skip=document.querySelector('.ytp-ad-skip-button,.ytp-ad-skip-button-modern');" +
+                "if(skip){skip.click();return'skip';}return'';})()"
+        )
+        if (!result.isNullOrEmpty()) Debug.log("cef") { "ad handled ($result)" }
     }
 
     private fun parseSnapshot(snapshot: String) {
