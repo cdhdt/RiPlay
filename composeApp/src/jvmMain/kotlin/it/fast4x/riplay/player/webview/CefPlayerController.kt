@@ -48,7 +48,8 @@ class CefPlayerController : PlayerController {
     private val frame = JFrame().apply {
         isUndecorated = true
         setSize(400, 300)
-        setLocation(-4000, -4000)
+        // -Driplay.cefvisible keeps it on-screen for debugging whether off-screen breaks playback.
+        if (System.getProperty("riplay.cefvisible") == null) setLocation(-4000, -4000)
         contentPane.add(browser.uiComponent)
         isVisible = true
     }
@@ -139,17 +140,22 @@ class CefPlayerController : PlayerController {
 
             skipAdIfPresent()
 
-            // YouTube Music does not autoplay on load: nudge it while the user wants playback and the
-            // video is present but paused. Also force the page to believe it is visible — off-screen
-            // it reports document.hidden=true and YouTube Music pauses itself.
-            if (desiredPlaying && snapshot.isNotEmpty() && snapshot.split(',').getOrNull(2) == "0") {
-                browser.evaluateJavaScript(
+            // YouTube Music does not resume by itself after an ad, and off-screen it reports
+            // document.hidden=true and pauses. #movie_player is the underlying YouTube player and
+            // exposes the same API as the IFrame (playVideo/pauseVideo/seekTo) — far more reliable
+            // than the shadow-DOM play button, whose shadow root is not reachable here.
+            val paused = snapshot.isNotEmpty() && snapshot.split(',').getOrNull(2) == "0"
+            if (desiredPlaying && paused) {
+                val r = browser.evaluateJavaScript(
                     "(function(){" +
                         "try{Object.defineProperty(document,'hidden',{value:false,configurable:true});" +
                         "Object.defineProperty(document,'visibilityState',{value:'visible',configurable:true});}catch(e){}" +
-                        "var v=document.querySelector('video');if(v&&v.play)v.play();" +
-                        "var b=document.querySelector('#play-pause-button,.play-pause-button');if(b)b.click();})()"
+                        "var v=document.querySelector('video');if(!v||!v.paused)return'notpaused';" +
+                        "var mp=document.getElementById('movie_player');" +
+                        "if(mp&&mp.playVideo){mp.playVideo();return'mp';}" +
+                        "if(v.play){v.play();}return'vplay';})()"
                 )
+                if (Debug.enabled) Debug.log("cef") { "play nudge: $r" }
             }
         }
     }
@@ -161,17 +167,14 @@ class CefPlayerController : PlayerController {
      */
     private suspend fun skipAdIfPresent() {
         val result = browser.evaluateJavaScript(
-            "(function(){" +
-                // .video-ads is always in the DOM; it only holds an ad when it has children — the
-                // check the mobile app relies on. .ad-showing is set only while an ad plays.
+            "(function(){var v=document.querySelector('video');if(!v)return'';" +
+                // On music.youtube.com the ad and the track share the same <video>. Seeking to the
+                // end skips the ad, but doing it to a real track would break it, so never touch a
+                // video longer than an ad (~90s) — the duration guard is the real safety net.
+                "if(!isFinite(v.duration)||v.duration<=0||v.duration>90)return'';" +
                 "var c=document.querySelector('.video-ads');" +
-                "var adVideo=(c&&c.childElementCount>0)?c.querySelector('video'):null;" +
-                "if(adVideo&&isFinite(adVideo.duration)){adVideo.currentTime=adVideo.duration-0.1;return'ad';}" +
-                "if(document.getElementsByClassName('ad-showing').length>0){" +
-                "var m=document.querySelector('.html5-main-video,video');" +
-                "if(m&&isFinite(m.duration)){m.currentTime=m.duration-0.1;return'ad2';}}" +
-                "var skip=document.querySelector('.ytp-ad-skip-button,.ytp-ad-skip-button-modern');" +
-                "if(skip){skip.click();return'skip';}return'';})()"
+                "var ad=(c&&c.childElementCount>0)||document.getElementsByClassName('ad-showing').length>0;" +
+                "if(ad){v.currentTime=v.duration-0.1;return'ad';}return'';})()"
         )
         if (!result.isNullOrEmpty()) Debug.log("cef") { "ad handled ($result)" }
     }
