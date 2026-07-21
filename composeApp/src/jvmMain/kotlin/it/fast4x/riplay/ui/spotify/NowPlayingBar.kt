@@ -20,10 +20,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.automirrored.filled.VolumeDown
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Repeat
@@ -60,7 +62,13 @@ import kotlin.math.roundToInt
 
 /** Bottom transport bar, full width, ~88dp. Only shown by the shell when a track is loaded. */
 @Composable
-fun NowPlayingBar(player: QueuePlayer) {
+fun NowPlayingBar(
+    player: QueuePlayer,
+    queueOpen: Boolean = false,
+    lyricsOpen: Boolean = false,
+    onToggleQueue: () -> Unit = {},
+    onToggleLyrics: () -> Unit = {},
+) {
     val playback by player.playback.collectAsState()
     val queue by player.queue.collectAsState()
     val current = queue.current ?: return
@@ -191,6 +199,8 @@ fun NowPlayingBar(player: QueuePlayer) {
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Spacer(Modifier.weight(1f))
+            ControlIcon(Icons.Filled.Lyrics, "Paroles", active = lyricsOpen) { onToggleLyrics() }
+            ControlIcon(Icons.AutoMirrored.Filled.QueueMusic, "File d'attente", active = queueOpen) { onToggleQueue() }
             val volIcon = when {
                 playback.isMuted || playback.volume == 0f -> Icons.AutoMirrored.Filled.VolumeOff
                 playback.volume < 0.5f -> Icons.AutoMirrored.Filled.VolumeDown
