@@ -1,8 +1,12 @@
 package it.fast4x.riplay.player
 
+import it.fast4x.environment.Environment
+import it.fast4x.environment.models.bodies.NextBody
+import it.fast4x.environment.requests.nextPage
 import it.fast4x.riplay.player.webview.CefPlayerController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -127,6 +131,39 @@ class QueuePlayer(private val audio: CefPlayerController) : PlayerController {
         }
     }
 
+    /** Jump to a specific queue position (used by the queue panel). */
+    fun playAt(index: Int) {
+        if (index !in _queue.value.items.indices) return
+        _queue.update { it.copy(index = index) }
+        loadCurrent()
+    }
+
+    /** Remove a queued track; keeps the same track playing, or skips if it was the one removed. */
+    fun removeAt(index: Int) {
+        val before = _queue.value
+        if (index !in before.items.indices) return
+        val playingId = before.current?.videoId
+        val removedCurrent = index == before.index
+        val newItems = before.items.toMutableList().apply { removeAt(index) }
+        val newIndex = when {
+            newItems.isEmpty() -> -1
+            else -> newItems.indexOfFirst { it.videoId == playingId }
+                .takeIf { it >= 0 } ?: index.coerceIn(0, newItems.lastIndex)
+        }
+        _queue.update { it.copy(items = newItems, index = newIndex) }
+        if (removedCurrent && newIndex >= 0) loadCurrent()
+    }
+
+    /** Reorder the queue while keeping the current track playing. */
+    fun move(from: Int, to: Int) {
+        val before = _queue.value
+        if (from !in before.items.indices || to !in before.items.indices) return
+        val playingId = before.current?.videoId
+        val newItems = before.items.toMutableList().apply { add(to, removeAt(from)) }
+        val newIndex = newItems.indexOfFirst { it.videoId == playingId }.takeIf { it >= 0 } ?: before.index
+        _queue.update { it.copy(items = newItems, index = newIndex) }
+    }
+
     // Transport delegates to the audio engine.
     override fun play() = audio.play()
     override fun pause() = audio.pause()
@@ -154,9 +191,25 @@ class QueuePlayer(private val audio: CefPlayerController) : PlayerController {
         val duration = s.duration
         if (duration <= 0) return
         val nearEnd = s.timestamp >= duration - 1200
-        if (nearEnd && advancedForVideoId != current.videoId) {
-            advancedForVideoId = current.videoId
-            if (_queue.value.hasNext || _queue.value.repeat == RepeatMode.ONE) next()
+        if (!nearEnd || advancedForVideoId == current.videoId) return
+        advancedForVideoId = current.videoId
+        when {
+            _queue.value.hasNext || _queue.value.repeat == RepeatMode.ONE -> next()
+            // Queue exhausted with repeat off: keep playing by starting YouTube's radio for this track.
+            else -> scope.launch { startRadio(current.videoId) }
         }
+    }
+
+    /** Fetch YouTube Music's "up next" radio for [seedVideoId], append it and play on. */
+    private suspend fun startRadio(seedVideoId: String) {
+        val related = withContext(Dispatchers.IO) {
+            Environment.nextPage(NextBody(videoId = seedVideoId, isAudioOnly = true))
+                ?.getOrNull()?.itemsPage?.items.orEmpty()
+                .map { QueueItem(it.key, it.title, it.authors?.joinToString(", ") { a -> a.name.orEmpty() }, it.thumbnail?.url) }
+                .filter { it.videoId.isNotEmpty() && it.videoId != seedVideoId }
+        }
+        if (related.isEmpty()) return
+        enqueue(related)
+        next()
     }
 }
