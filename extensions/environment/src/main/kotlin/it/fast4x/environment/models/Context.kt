@@ -181,5 +181,23 @@ data class Context(
             )
         )
 
+        // The headset client returns direct stream URLs that carry no PO token requirement and no
+        // per-URL byte budget, which is why yt-dlp reaches for it. Values mirror yt-dlp's
+        // android_vr entry. REQUIRE_JS_PLAYER is false there, so no signatureTimestamp is needed.
+        val ANDROID_VR = Context(
+            Client(
+                clientName = "ANDROID_VR",
+                clientVersion = "1.65.10",
+                deviceMake = "Oculus",
+                deviceModel = "Quest 3",
+                androidSdkVersion = 32,
+                osName = "Android",
+                osVersion = "12L",
+                userAgent = "com.google.android.apps.youtube.vr.oculus/1.65.10 " +
+                        "(Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip",
+                xClientName = 28,
+            )
+        )
+
     }
 }

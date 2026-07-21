@@ -31,27 +31,13 @@ fun main(args: Array<String>) = runBlocking {
     val factory = MediaPlayerFactory(*VlcNative.factoryArgs, "--aout=dummy", "--quiet")
     val player = factory.mediaPlayers().newMediaPlayer()
 
-    val userAgent = it.fast4x.environment.models.Context.DefaultWeb3.client.userAgent
-    println("client user-agent: $userAgent")
-
-    // Probes the very URL handed to VLC next. Resolving a second one would compare two different
-    // URLs and prove nothing about which side is at fault.
-    val probe = (java.net.URI(url).toURL().openConnection() as java.net.HttpURLConnection).apply {
-        requestMethod = "GET"
-        setRequestProperty("Range", "bytes=0-1")
-        connectTimeout = 15_000
-        readTimeout = 15_000
-    }
-    println("java GET on the same url: HTTP ${probe.responseCode} ${probe.contentType}")
-    probe.disconnect()
-
     try {
         check(player.media().play(url)) {
             "FAILED: libvlc refused to open the stream"
         }
 
-        // A short run only proves the first chunk works. -PplaySeconds=90 crosses a chunk boundary,
-        // which is where the stream is refetched and where 403s showed up.
+        // A short run only proves the start works. -PplaySeconds=90 keeps playing well past it,
+        // which is where a URL that 403s partway through gets caught.
         val targetMs = (System.getProperty("playSeconds")?.toLongOrNull() ?: 15L) * 1000
         var elapsed = 0L
         var stalledFor = 0

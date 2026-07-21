@@ -17,9 +17,10 @@ suspend fun resolveAudioStreamUrl(videoId: String): String? = withContext(Dispat
         .onFailure { println("resolveAudioStreamUrl: no signature timestamp — $it") }
         .getOrNull()
 
-    // The iOS client returns direct URLs; WEB_REMIX returns signatureCipher, whose deciphering
-    // YouTube breaks regularly. Diagnose with ./gradlew :composeApp:checkStreamUrl
-    val player = listOf(Context.DefaultWeb3, Context.DefaultWeb)
+    // ANDROID_VR first: its direct URLs carry no PO token requirement and no per-URL byte budget,
+    // so they survive a full track — the iOS client's URLs 403 partway through many songs. iOS and
+    // WEB_REMIX stay as fallbacks. Diagnose with ./gradlew :composeApp:checkStreamUrl
+    val player = listOf(Context.ANDROID_VR, Context.DefaultWeb3, Context.DefaultWeb)
         .firstNotNullOfOrNull { context ->
             EnvironmentExt.simpleMetadataPlayer(
                 videoId = videoId,
