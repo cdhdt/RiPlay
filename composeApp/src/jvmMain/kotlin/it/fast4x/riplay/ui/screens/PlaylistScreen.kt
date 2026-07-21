@@ -78,7 +78,7 @@ import riplay.composeapp.generated.resources.translate
 @Composable
 fun PlaylistScreen(
     browseId: String,
-    onSongClick: (Song) -> Unit,
+    onSongClick: (songs: List<Song>, index: Int) -> Unit,
     onAlbumClick: (String) -> Unit,
     onClosePage: () -> Unit
 ) {
@@ -340,7 +340,7 @@ fun PlaylistScreen(
                                              */
                                         },
                                         onClick = {
-                                            onSongClick(song.asSong)
+                                            onSongClick(songs.orEmpty().map { it.asSong }, index)
                                         }
                                     )
                                     .padding(endPaddingValues)

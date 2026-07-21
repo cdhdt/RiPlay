@@ -84,7 +84,7 @@ import kotlin.random.Random
 @Composable
 fun ArtistScreen(
     browseId: String,
-    onSongClick: (Song) -> Unit,
+    onSongClick: (songs: List<Song>, index: Int) -> Unit,
     onPlaylistClick: (String) -> Unit,
     onViewAllAlbumsClick: () -> Unit,
     onViewAllSinglesClick: () -> Unit,
@@ -343,7 +343,7 @@ fun ArtistScreen(
                                              */
                                         },
                                         onClick = {
-                                            onSongClick(song.asSong)
+                                            onSongClick(songs.orEmpty().map { it.asSong }, index)
                                         }
                                     )
                                     .padding(endPaddingValues)

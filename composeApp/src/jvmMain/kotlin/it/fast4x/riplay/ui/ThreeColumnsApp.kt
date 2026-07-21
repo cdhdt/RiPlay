@@ -83,6 +83,13 @@ fun ThreeColumnsApp() {
         coroutineScope.launch { db.upsert(song) }
     }
 
+    // Album/playlist/artist: clicking a track queues the whole list from that position, like Spotify.
+    fun playSongs(songs: List<Song>, index: Int) {
+        if (songs.isEmpty()) return
+        player?.playNow(songs.map { QueueItem(it.id, it.title, it.artistsText, it.thumbnailUrl) }, index)
+        songs.getOrNull(index)?.let { s -> coroutineScope.launch { db.upsert(s) } }
+    }
+
     SpotifyShell(
         player = player,
         activeSection = activeSection,
@@ -95,7 +102,7 @@ fun ThreeColumnsApp() {
             showPageType == PageType.ALBUM -> ScrollContent {
                 AlbumScreen(
                     browseId = albumId,
-                    onSongClick = ::playSong,
+                    onSongClick = ::playSongs,
                     onAlbumClick = { albumId = it; showPageType = PageType.ALBUM },
                 )
             }
@@ -103,7 +110,7 @@ fun ThreeColumnsApp() {
             showPageType == PageType.ARTIST -> ScrollContent {
                 ArtistScreen(
                     browseId = artistId,
-                    onSongClick = ::playSong,
+                    onSongClick = ::playSongs,
                     onPlaylistClick = { playlistId = it; showPageType = PageType.PLAYLIST },
                     onViewAllAlbumsClick = {},
                     onViewAllSinglesClick = {},
@@ -115,7 +122,7 @@ fun ThreeColumnsApp() {
             showPageType == PageType.PLAYLIST -> ScrollContent {
                 PlaylistScreen(
                     browseId = playlistId,
-                    onSongClick = ::playSong,
+                    onSongClick = ::playSongs,
                     onAlbumClick = { albumId = it; showPageType = PageType.ALBUM },
                     onClosePage = { showPageType = PageType.QUICKPICS },
                 )
