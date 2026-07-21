@@ -68,7 +68,9 @@ import riplay.composeapp.generated.resources.artists
 import riplay.composeapp.generated.resources.library
 import riplay.composeapp.generated.resources.musical_notes
 import it.fast4x.riplay.player.vlcj.VlcjFrameController
-import it.fast4x.riplay.player.resolveAudioStreamUrl
+import kotlinx.coroutines.withContext
+import it.fast4x.riplay.player.webview.CefRuntime
+import it.fast4x.riplay.player.webview.CefPlayerController
 
 
 @Composable
@@ -80,28 +82,24 @@ fun ThreeColumnsApp() {
 
     var videoId by remember { mutableStateOf("") }
     var nowPlayingSong by remember { mutableStateOf<Song?>(null) }
-    var url by remember { mutableStateOf<String?>(null) }
     var artistId by remember { mutableStateOf("") }
     var albumId by remember { mutableStateOf("") }
     var playlistId by remember { mutableStateOf("") }
     var mood by remember { mutableStateOf<Environment.Mood.Item?>(null) }
 
-    LaunchedEffect(videoId) {
-        if (videoId.isEmpty()) return@LaunchedEffect
-
-        nowPlayingSong = db.getSong(videoId)
-
-        // Cleared first, otherwise VLCJ keeps playing the previous track while the new one
-        // resolves, and falls back to it if resolution fails.
-        url = null
-        url = resolveAudioStreamUrl(videoId)
-        if (url == null) println("No stream for $videoId")
+    // Embedded Chromium plays every track (it drives the real YouTube Music page), unlike stream
+    // extraction which 403s on label content. Initialized off the UI thread; the controller exists
+    // only once the ~150 MB runtime is ready.
+    val cefStatus by CefRuntime.state.collectAsState()
+    LaunchedEffect(Unit) { withContext(Dispatchers.IO) { CefRuntime.ensureInitialized() } }
+    val player = remember(cefStatus) {
+        if (cefStatus == CefRuntime.Status.READY) CefPlayerController() else null
     }
 
-    coroutineScope.launch {
-        db.getAllSongs().collect {
-            println("songs in db ${it.size}")
-        }
+    LaunchedEffect(videoId, player) {
+        if (videoId.isEmpty() || player == null) return@LaunchedEffect
+        nowPlayingSong = db.getSong(videoId)
+        player.load(videoId)
     }
 
     /*
@@ -131,9 +129,6 @@ fun ThreeColumnsApp() {
 
     //var url by remember { mutableStateOf(urlVideo) }
 
-    //val componentController = remember(url) { VlcjComponentController() }
-    val frameController = remember(url) { VlcjFrameController() }
-
     var showPageSheet by remember { mutableStateOf(false) }
     var showPageType by remember { mutableStateOf(PageType.QUICKPICS) }
 
@@ -155,15 +150,13 @@ fun ThreeColumnsApp() {
              */
         },
         bottomBar = {
-            if (url != null) {
+            if (videoId.isNotEmpty() && player != null) {
                 MiniPlayer(
-                    frameController = frameController,
-                    url = url,
+                    controller = player,
                     song = nowPlayingSong,
                     onExpandAction = { showPageSheet = true }
                 )
             }
-
         }
     ) { innerPadding ->
 
@@ -195,7 +188,6 @@ fun ThreeColumnsApp() {
                 showPageType = PageType.ALBUM
                 showPageSheet = true
             },
-            frameController = frameController,
             centerPanelContent = {
                 when (showPageType) {
                     PageType.ALBUM -> {
@@ -425,29 +417,14 @@ fun ThreeColumnsLayout(
     onHomeClick: () -> Unit = {},
     onSongClick: (Song) -> Unit = {},
     onAlbumClick: (Album) -> Unit = {},
-    frameController: VlcjFrameController = remember { VlcjFrameController() },
     centerPanelContent: @Composable () -> Unit = {}
 ) {
     Row(Modifier.fillMaxSize()) {
         RightPanelContent(
             onShowPlayer = {}
         ) {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Top
-            ) {
-                FrameContainer(
-                    Modifier.requiredHeight(200.dp),
-                    //.border(BorderStroke(1.dp, Color.Red)),
-                    frameController.size.collectAsState(null).value?.run {
-                        IntSize(first, second)
-                    } ?: IntSize.Zero,
-                    frameController.bytes.collectAsState(null).value
-                )
-            }
-
-
+            // Audio-only: playback lives in the hidden CEF browser, so the right panel no longer
+            // renders a VLC video frame here.
         }
 
         VerticalDivider(
