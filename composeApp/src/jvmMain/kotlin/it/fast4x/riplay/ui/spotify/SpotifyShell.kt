@@ -53,11 +53,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import it.fast4x.riplay.player.QueuePlayer
+import it.fast4x.riplay.ui.spotify.lyrics.LyricsPanel
+import it.fast4x.riplay.ui.spotify.queue.QueuePanel
 import org.jetbrains.compose.resources.painterResource
 import riplay.composeapp.generated.resources.Res
 import riplay.composeapp.generated.resources.app_icon
 
 enum class NavSection { HOME, SEARCH, LIBRARY }
+
+private enum class RightPanel { NONE, QUEUE, LYRICS }
 
 /**
  * Spotify-style shell: sidebar + (topbar over content) as one row, now-playing bar full width below.
@@ -71,6 +75,9 @@ fun SpotifyShell(
     content: @Composable () -> Unit,
 ) {
     val current = player?.queue?.collectAsState()?.value?.current
+    var rightPanel by remember { mutableStateOf(RightPanel.NONE) }
+    // A right panel only makes sense while something is loaded; drop it when playback clears.
+    if (current == null && rightPanel != RightPanel.NONE) rightPanel = RightPanel.NONE
 
     Column(
         Modifier.fillMaxSize().background(RiPlayColors.bg).padding(8.dp),
@@ -96,9 +103,22 @@ fun SpotifyShell(
                 TopBar()
                 Box(Modifier.weight(1f).fillMaxWidth()) { content() }
             }
+            if (player != null && current != null) {
+                when (rightPanel) {
+                    RightPanel.QUEUE -> QueuePanel(player) { rightPanel = RightPanel.NONE }
+                    RightPanel.LYRICS -> LyricsPanel(player) { rightPanel = RightPanel.NONE }
+                    RightPanel.NONE -> {}
+                }
+            }
         }
         if (player != null && current != null) {
-            NowPlayingBar(player)
+            NowPlayingBar(
+                player = player,
+                queueOpen = rightPanel == RightPanel.QUEUE,
+                lyricsOpen = rightPanel == RightPanel.LYRICS,
+                onToggleQueue = { rightPanel = if (rightPanel == RightPanel.QUEUE) RightPanel.NONE else RightPanel.QUEUE },
+                onToggleLyrics = { rightPanel = if (rightPanel == RightPanel.LYRICS) RightPanel.NONE else RightPanel.LYRICS },
+            )
         }
     }
 }

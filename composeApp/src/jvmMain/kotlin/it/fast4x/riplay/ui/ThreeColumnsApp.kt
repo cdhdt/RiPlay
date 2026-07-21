@@ -1,15 +1,10 @@
 package it.fast4x.riplay.ui
 
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -18,9 +13,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import database.MusicDatabaseDesktop
 import database.entities.Song
 import it.fast4x.environment.Environment
@@ -30,16 +23,15 @@ import it.fast4x.riplay.player.QueueItem
 import it.fast4x.riplay.player.QueuePlayer
 import it.fast4x.riplay.player.webview.CefPlayerController
 import it.fast4x.riplay.player.webview.CefRuntime
-import it.fast4x.riplay.ui.pages.AlbumsPage
-import it.fast4x.riplay.ui.pages.SongsPage
 import it.fast4x.riplay.ui.screens.AlbumScreen
 import it.fast4x.riplay.ui.screens.ArtistScreen
 import it.fast4x.riplay.ui.screens.MoodScreen
 import it.fast4x.riplay.ui.screens.PlaylistScreen
 import it.fast4x.riplay.ui.screens.QuickPicsScreen
 import it.fast4x.riplay.ui.spotify.NavSection
-import it.fast4x.riplay.ui.spotify.RiPlayColors
 import it.fast4x.riplay.ui.spotify.SpotifyShell
+import it.fast4x.riplay.ui.spotify.library.LibraryScreen
+import it.fast4x.riplay.ui.spotify.search.SearchScreen
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -140,18 +132,16 @@ fun ThreeColumnsApp() {
                 }
             }
 
-            activeSection == NavSection.LIBRARY -> LibraryContent(
-                onSongClick = ::playSong,
-                onAlbumClick = { albumId = it.id; showPageType = PageType.ALBUM },
+            activeSection == NavSection.LIBRARY -> LibraryScreen(
+                onPlay = { player?.playNow(listOf(it)) },
+                onOpenAlbum = { albumId = it.id; showPageType = PageType.ALBUM },
+                onOpenArtist = { artistId = it; showPageType = PageType.ARTIST },
+                onOpenPlaylist = {}, // ponytail: local playlists tab is empty-state; no browseId to open yet
             )
 
-            activeSection == NavSection.SEARCH -> ScrollContent {
-                Text(
-                    "Recherche — bientôt disponible",
-                    color = RiPlayColors.textSecondary,
-                    fontSize = 16.sp,
-                )
-            }
+            activeSection == NavSection.SEARCH -> SearchScreen(
+                onPlay = { player?.playNow(listOf(it)) },
+            )
 
             else -> ScrollContent { // HOME / QUICKPICS
                 QuickPicsScreen(
@@ -180,34 +170,3 @@ private fun ScrollContent(content: @Composable () -> Unit) {
     }
 }
 
-/** Basic library view (reuses existing DB-backed pages). ponytail: two tabs, no search/sort yet. */
-@Composable
-private fun LibraryContent(
-    onSongClick: (Song) -> Unit,
-    onAlbumClick: (database.entities.Album) -> Unit,
-) {
-    var tab by remember { mutableStateOf(0) }
-    Column(Modifier.fillMaxSize().padding(horizontal = 24.dp).padding(top = 8.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.padding(bottom = 12.dp)) {
-            LibraryTab("Titres", tab == 0) { tab = 0 }
-            LibraryTab("Albums", tab == 1) { tab = 1 }
-        }
-        when (tab) {
-            0 -> SongsPage(onSongClick = onSongClick)
-            else -> AlbumsPage(onAlbumClick = onAlbumClick)
-        }
-    }
-}
-
-@Composable
-private fun LibraryTab(label: String, active: Boolean, onClick: () -> Unit) {
-    Text(
-        label,
-        color = if (active) RiPlayColors.textPrimary else RiPlayColors.textSecondary,
-        fontSize = 18.sp,
-        fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-        modifier = Modifier
-            .clickable(remember { MutableInteractionSource() }, indication = null) { onClick() }
-            .padding(4.dp),
-    )
-}
