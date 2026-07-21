@@ -142,13 +142,14 @@ class QueuePlayer(private val audio: CefPlayerController) : PlayerController {
     fun removeAt(index: Int) {
         val before = _queue.value
         if (index !in before.items.indices) return
-        val playingId = before.current?.videoId
         val removedCurrent = index == before.index
         val newItems = before.items.toMutableList().apply { removeAt(index) }
+        // Track the playing item by POSITION, not videoId — the queue can hold duplicate ids.
         val newIndex = when {
             newItems.isEmpty() -> -1
-            else -> newItems.indexOfFirst { it.videoId == playingId }
-                .takeIf { it >= 0 } ?: index.coerceIn(0, newItems.lastIndex)
+            removedCurrent -> index.coerceIn(0, newItems.lastIndex)
+            index < before.index -> before.index - 1
+            else -> before.index
         }
         _queue.update { it.copy(items = newItems, index = newIndex) }
         if (removedCurrent && newIndex >= 0) loadCurrent()
@@ -158,9 +159,15 @@ class QueuePlayer(private val audio: CefPlayerController) : PlayerController {
     fun move(from: Int, to: Int) {
         val before = _queue.value
         if (from !in before.items.indices || to !in before.items.indices) return
-        val playingId = before.current?.videoId
         val newItems = before.items.toMutableList().apply { add(to, removeAt(from)) }
-        val newIndex = newItems.indexOfFirst { it.videoId == playingId }.takeIf { it >= 0 } ?: before.index
+        // Position arithmetic (not videoId lookup): where does the playing item land after the move?
+        val newIndex = when (val p = before.index) {
+            from -> to
+            else -> {
+                val afterRemove = if (p > from) p - 1 else p
+                if (afterRemove >= to) afterRemove + 1 else afterRemove
+            }
+        }
         _queue.update { it.copy(items = newItems, index = newIndex) }
     }
 
@@ -212,6 +219,8 @@ class QueuePlayer(private val audio: CefPlayerController) : PlayerController {
                 .filter { it.videoId.isNotEmpty() && it.videoId != seedVideoId }
         }
         if (related.isEmpty()) return
+        // The fetch is slow; bail if the user moved on (new playNow, skip, etc.) meanwhile.
+        if (_queue.value.current?.videoId != seedVideoId) return
         enqueue(related)
         next()
     }
