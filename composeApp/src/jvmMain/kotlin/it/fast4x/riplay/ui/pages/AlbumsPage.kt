@@ -39,8 +39,11 @@ fun AlbumsPage(
     val albums = remember { SnapshotStateList<Album>() }
 
     LaunchedEffect(Unit) {
+        // Replace, not append: the Flow re-emits the full list on every DB change, and appending
+        // would duplicate keys and crash the LazyColumn. Same fix as SongsPage.
         DB.getAllAlbums().collect {
-            albums += it
+            albums.clear()
+            albums.addAll(it)
         }
     }
 

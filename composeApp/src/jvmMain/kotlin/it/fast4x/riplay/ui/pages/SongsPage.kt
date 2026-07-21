@@ -39,9 +39,12 @@ fun SongsPage(
     val songs = remember { SnapshotStateList<SongEntity>() }
 
     LaunchedEffect(Unit) {
-        //MusicDatabaseDesktop.songsByTitleAsc().also { songs.addAll(it) }
+        // The Flow re-emits the whole list on every DB change, so replace rather than append —
+        // appending duplicates every row on the next emission and crashes the LazyColumn on its
+        // now-repeated key (e.g. after clicking a song, which upserts it and triggers a re-emit).
         DB.songsByTitleAsc().collect {
-            songs += it
+            songs.clear()
+            songs.addAll(it)
         }
     }
 
