@@ -132,7 +132,7 @@ class CefPlayerController : PlayerController {
                 else browser.loadURL("https://music.youtube.com/watch?v=$target")
             }
 
-            parseSnapshot(snapshot)
+            parseSnapshot(snapshot, flags = parts.getOrElse(2) { "" })
         }
     }
 
@@ -164,7 +164,7 @@ class CefPlayerController : PlayerController {
             "var snap=[v.currentTime,v.duration,v.paused?0:1,v.muted?1:0,v.volume].join(',');" +
             "return out+snap+'\\n'+flag;})($desired)"
 
-    private fun parseSnapshot(snapshot: String) {
+    private fun parseSnapshot(snapshot: String, flags: String) {
         val parts = snapshot.split(',')
         if (parts.size < 5) return
         val time = parts[0].toDoubleOrNull() ?: return
@@ -176,6 +176,7 @@ class CefPlayerController : PlayerController {
                 isPlaying = parts[2] == "1",
                 isMuted = parts[3] == "1",
                 volume = parts[4].toFloatOrNull() ?: it.volume,
+                adShowing = "ad" in flags,
             )
         }
     }
