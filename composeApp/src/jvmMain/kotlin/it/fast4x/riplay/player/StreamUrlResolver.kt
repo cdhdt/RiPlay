@@ -9,7 +9,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.ExperimentalSerializationApi
 
 /**
- * Resolves a playable audio URL for VLCJ. Returns null when the track is unavailable
+ * Resolves a playable audio URL for a track. Returns null when the track is unavailable
  * (removed, region blocked, age restricted) — a common case, not an error.
  */
 @OptIn(ExperimentalSerializationApi::class)
