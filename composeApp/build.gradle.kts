@@ -159,6 +159,9 @@ compose.desktop {
             "--add-opens", "java.desktop/sun.awt=ALL-UNNAMED",
             "--add-opens", "java.desktop/java.awt.peer=ALL-UNNAMED",
             "--add-opens", "java.base/java.lang=ALL-UNNAMED",
+            // The JVM side is Compose + JCEF glue; the heavy lifting is in the Chromium processes,
+            // so a modest heap cap keeps the JVM from holding onto memory it does not need.
+            "-Xmx512m",
         )
 
         nativeDistributions {
