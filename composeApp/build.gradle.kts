@@ -153,6 +153,14 @@ compose.desktop {
         // `./gradlew :composeApp:run -Priplay.debug` turns on verbose playback logging (see Debug).
         if (project.hasProperty("riplay.debug")) jvmArgs += "-Driplay.debug=true"
 
+        // JCEF (the embedded-Chromium player) reaches into java.desktop internals; without these it
+        // fails to initialize at runtime, both under `run` and in the packaged app.
+        jvmArgs += listOf(
+            "--add-opens", "java.desktop/sun.awt=ALL-UNNAMED",
+            "--add-opens", "java.desktop/java.awt.peer=ALL-UNNAMED",
+            "--add-opens", "java.base/java.lang=ALL-UNNAMED",
+        )
+
         nativeDistributions {
             vendor = "RiPlay"
             description = "RiPlay Desktop Music Player"
