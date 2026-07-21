@@ -16,7 +16,6 @@ plugins {
     alias(libs.plugins.room)
 }
 
-
 fun Project.propertyOrEmpty(name: String): String {
     return (findProperty(name) as? String) ?: ""
 }
@@ -174,9 +173,6 @@ compose.desktop {
             packageName = "RiPlay"
             packageVersion = riplayVersion
 
-            // Per-platform subdirectories; only windows-x64 is populated, by stageWindowsVlc.
-            appResourcesRootDir.set(layout.buildDirectory.dir("vlc-resources"))
-
             // jpackage needs raster icons; see desktop-icons/README.md to regenerate them.
             // No macOS entry: not a build target, so no .icns to keep around.
             val iconsRoot = project.file("desktop-icons")
@@ -209,9 +205,6 @@ kotlin {
     }
 
     jvm()
-
-
-
 
     sourceSets {
         all {
@@ -269,7 +262,6 @@ kotlin {
             implementation(compose.desktop.currentOs)
 
             implementation(libs.material.icon.desktop)
-            implementation(libs.vlcj)
 
             // JavaFX ships per-platform artifacts and was hardcoded to "win". Apple Silicon needs
             // mac-aarch64, plain "mac" pulls Intel binaries. Cross-compile with -PfxSuffix=<suffix>.
@@ -374,104 +366,14 @@ kotlin {
     }
 }
 
-
 room {
     schemaDirectory("$projectDir/schemas")
     generateKotlin = true
 }
 
-// VLC ships a self-contained build for Windows, so the package can carry its own copy and play
-// out of the box. Linux is left to the system install on purpose: its plugins link against ~140
-// system libraries, and shipping that closure is what AppImage and Flatpak are for.
-val vlcWindowsVersion = "3.0.21"
-// Published alongside the archive as <name>.sha256. Pinned because this binary goes straight into
-// an installer we hand to users, so a corrupted or swapped download has to fail the build loudly.
-val vlcWindowsSha256 = "a0b7ec02b50adf6417eed014fb8df50af39690505a4225b85b3dc2ed17d14843"
-val hostIsWindows = System.getProperty("os.name").lowercase().contains("win")
-
-val prepareVlcResources by tasks.registering {
-    description = "Stages the bundled VLC runtime for platforms that need one"
-    outputs.dir(layout.buildDirectory.dir("vlc-resources"))
-
-    doLast {
-        val root = layout.buildDirectory.dir("vlc-resources").get().asFile
-        root.mkdirs()
-
-        // Only Windows packages carry VLC. On Linux the directory stays empty, which is what
-        // appResourcesRootDir expects, and VlcNative then falls back to the system install.
-        // -PforceVlcStaging exercises the download from a non-Windows machine, so the fetch and
-        // checksum can be checked without spending a CI round trip.
-        if (!hostIsWindows && !project.hasProperty("forceVlcStaging")) return@doLast
-
-        val target = File(root, "windows-x64/vlc")
-        if (File(target, "libvlc.dll").exists()) return@doLast
-        target.mkdirs()
-
-        val archive = File(temporaryDir, "vlc-$vlcWindowsVersion-win64.zip")
-        if (!archive.exists()) {
-            // Not get.videolan.org: it 302s to a randomly picked mirror, and a failing one answers
-            // with an HTML error page that only surfaces later as "Cannot expand ZIP".
-            val url = "https://download.videolan.org/pub/videolan/vlc/$vlcWindowsVersion/win64/" +
-                    "vlc-$vlcWindowsVersion-win64.zip"
-            logger.lifecycle("Downloading $url")
-            uri(url).toURL().openStream().use { input ->
-                archive.outputStream().use { output -> input.copyTo(output) }
-            }
-        }
-
-        val digest = MessageDigest.getInstance("SHA-256")
-        archive.inputStream().use { input ->
-            val buffer = ByteArray(1 shl 16)
-            while (true) {
-                val read = input.read(buffer)
-                if (read < 0) break
-                digest.update(buffer, 0, read)
-            }
-        }
-        val actualSha256 = digest.digest()
-            .joinToString("") { byte -> String.format("%02x", byte) }
-        if (actualSha256 != vlcWindowsSha256) {
-            archive.delete()
-            error(
-                "VLC archive checksum mismatch: expected $vlcWindowsSha256, got $actualSha256. " +
-                        "The download was truncated or served by a mirror we do not trust."
-            )
-        }
-
-        // The archive also holds the VLC desktop app, which would be dead weight in the package.
-        val prefix = "vlc-$vlcWindowsVersion/"
-        val runtimeDlls = setOf("libvlc.dll", "libvlccore.dll")
-        // 19 MB of VLC's own Qt interface, 17 of them one DLL. libvlc never loads it: we drive it
-        // as a library and never ask for an interface. The other plugin folders stay — codec,
-        // access and demux are what actually decode the stream.
-        val unusedPlugins = "plugins/gui/"
-        zipTree(archive).visit {
-            if (isDirectory) return@visit
-            val relative = path.removePrefix(prefix)
-            val keep = (relative.startsWith("plugins/") && !relative.startsWith(unusedPlugins)) ||
-                    name in runtimeDlls
-            if (relative == path || !keep) return@visit
-            val destination = File(target, relative)
-            destination.parentFile.mkdirs()
-            file.copyTo(destination, overwrite = true)
-        }
-
-        require(File(target, "libvlc.dll").exists()) { "libvlc.dll missing from the VLC archive" }
-        logger.lifecycle("Staged VLC into $target")
-    }
-}
-
-// prepareAppResources is the Compose task that reads appResourcesRootDir, so it is the one that
-// has to wait; the packaging tasks all funnel through it.
-tasks.matching { it.name == "prepareAppResources" }
-    .configureEach { dependsOn(prepareVlcResources) }
-
 // ./gradlew :composeApp:checkStreamUrl [-PvideoId=<id>]
-// ./gradlew :composeApp:checkPlayback  [-PvideoId=<id>]
 listOf(
     "checkStreamUrl" to "it.fast4x.riplay.player.StreamUrlCheckKt",
-    "checkPlayback" to "it.fast4x.riplay.player.PlaybackCheckKt",
-    "checkAppPath" to "it.fast4x.riplay.player.AppPathCheckKt",
     "checkWebPlayback" to "it.fast4x.riplay.player.webview.WebPlaybackCheckKt",
     "checkWebMusic" to "it.fast4x.riplay.player.webview.WebMusicCheckKt",
     "checkCef" to "it.fast4x.riplay.player.webview.WebCefCheckKt",
@@ -479,12 +381,12 @@ listOf(
 ).forEach { (taskName, entryPoint) ->
     tasks.register<JavaExec>(taskName) {
         group = "verification"
-        description = "Checks the YouTube to VLC playback chain end to end"
+        description = "Checks the YouTube playback chain end to end"
         val jvmMain = kotlin.jvm().compilations.getByName("main")
         classpath = files(jvmMain.output.allOutputs, jvmMain.runtimeDependencyFiles)
         mainClass.set(entryPoint)
         (project.findProperty("videoId") as String?)?.let { args(it) }
-        // Lets the checks exercise the bundled-VLC path without building a package.
+        // Points a check at packaged app resources (-PresourcesDir=...) without building a package.
         (project.findProperty("resourcesDir") as String?)
             ?.let { systemProperty("compose.application.resources.dir", it) }
         (project.findProperty("playSeconds") as String?)
@@ -522,5 +424,4 @@ dependencies {
 }
 
  */
-
 
