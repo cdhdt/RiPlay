@@ -86,7 +86,7 @@ import riplay.composeapp.generated.resources.translate
 @Composable
 fun AlbumScreen(
     browseId: String,
-    onSongClick: (Song) -> Unit,
+    onSongClick: (songs: List<Song>, index: Int) -> Unit,
     onAlbumClick: (String) -> Unit
 ) {
     val coroutineScope by remember { mutableStateOf(CoroutineScope(Dispatchers.IO)) }
@@ -415,7 +415,7 @@ fun AlbumScreen(
                                              */
                                         },
                                         onClick = {
-                                            onSongClick(song.asSong)
+                                            onSongClick(songs.orEmpty().map { it.asSong }, index)
                                         }
                                     )
                                     .padding(endPaddingValues)
