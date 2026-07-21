@@ -3,6 +3,7 @@ package it.fast4x.riplay.player
 import it.fast4x.environment.EnvironmentExt
 import it.fast4x.environment.models.Context
 import it.fast4x.environment.utils.NewPipeUtils
+import it.fast4x.riplay.player.Debug
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -29,6 +30,14 @@ suspend fun resolveAudioStreamUrl(videoId: String): String? = withContext(Dispat
             )
                 .onFailure { println("resolveAudioStreamUrl: player call failed — $it") }
                 .getOrNull()
+                .also {
+                    Debug.log("resolve") {
+                        "$videoId via ${context.client.clientName}: " +
+                            "status=${it?.playabilityStatus?.status} " +
+                            "formats=${it?.streamingData?.adaptiveFormats?.size ?: 0} " +
+                            "direct=${it?.streamingData?.autoMaxQualityFormat?.url != null}"
+                    }
+                }
                 ?.takeIf { it.streamingData?.autoMaxQualityFormat != null }
         } ?: return@withContext null
 
@@ -47,5 +56,5 @@ suspend fun resolveAudioStreamUrl(videoId: String): String? = withContext(Dispat
     NewPipeUtils.getStreamUrl(format, videoId)
         .onFailure { println("resolveAudioStreamUrl: url deciphering failed — $it") }
         .getOrNull()
-
+        .also { Debug.log("resolve") { "$videoId itag=${format.itag} url=${it?.take(90)}" } }
 }

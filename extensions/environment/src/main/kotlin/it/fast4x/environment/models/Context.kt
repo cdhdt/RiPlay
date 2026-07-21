@@ -38,6 +38,9 @@ data class Context(
         val useSignatureTimestamp: Boolean = false,
         val useWebPoTokens: Boolean = false,
         val isEmbedded: Boolean = false,
+        // ANDROID_VR is rejected with LOGIN_REQUIRED when a web-issued visitorData is attached to it
+        // (yt-dlp sends none for this client). Left true so every other client keeps its behaviour.
+        val sendVisitorData: Boolean = true,
         // val origin: String? = null,
         // val referer: String? = null,
     ){
@@ -50,9 +53,15 @@ data class Context(
                 clientName = clientName,
                 clientVersion = clientVersion,
                 osVersion = osVersion,
+                // Carried through because the ANDROID_VR client is rejected with LOGIN_REQUIRED
+                // unless the request body identifies the device; other clients leave these null.
+                deviceMake = deviceMake,
+                deviceModel = deviceModel,
+                osName = osName,
+                androidSdkVersion = androidSdkVersion,
                 gl = locale.gl,
                 hl = locale.hl,
-                visitorData = visitorData
+                visitorData = if (sendVisitorData) visitorData else null
             ),
             user = User(
                 onBehalfOfUser = dataSyncId
@@ -196,6 +205,7 @@ data class Context(
                 userAgent = "com.google.android.apps.youtube.vr.oculus/1.65.10 " +
                         "(Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip",
                 xClientName = 28,
+                sendVisitorData = false,
             )
         )
 
