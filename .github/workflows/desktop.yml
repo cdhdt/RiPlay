@@ -3,10 +3,13 @@ name: Desktop
 # No upstream workflow builds the desktop target. Leaves the Android workflows alone.
 on:
   push:
-    branches: [desktop-linux-windows]
+    # Every desktop working branch. The series moved from desktop-linux-windows to
+    # desktop-rebase, and the ten commits carrying the whole UI were never built
+    # because the trigger still named the old branch only.
+    branches: ["desktop-*"]
     tags: ["v*"]
   pull_request:
-    branches: [desktop-linux-windows]
+    branches: ["desktop-*"]
   workflow_dispatch:
 
 jobs:
