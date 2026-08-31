@@ -129,6 +129,9 @@ private fun TrackRow(entity: SongEntity, onClick: () -> Unit, onToggleLike: () -
     val song = entity.song
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
+    // Held here, not inside the button: the pointer leaves the row to reach the menu, and the
+    // button must survive that or the menu closes before anything can be clicked.
+    var addOpen by remember { mutableStateOf(false) }
     Row(
         Modifier
             .fillMaxWidth()
@@ -161,6 +164,8 @@ private fun TrackRow(entity: SongEntity, onClick: () -> Unit, onToggleLike: () -
                 modifier = Modifier.weight(1f),
             )
         }
+        // Only on hover: the row is a list of titles, not a row of buttons.
+        if (hovered || addOpen) AddToPlaylistButton(song, addOpen) { addOpen = it }
         LikeButton(liked = song.isLiked, onToggle = onToggleLike)
         song.durationText?.let { Text(it, color = RiPlayColors.textTertiary, fontSize = 12.sp) }
     }
