@@ -263,23 +263,6 @@ kotlin {
 
             implementation(libs.material.icon.desktop)
 
-            // JavaFX ships per-platform artifacts and was hardcoded to "win". Apple Silicon needs
-            // mac-aarch64, plain "mac" pulls Intel binaries. Cross-compile with -PfxSuffix=<suffix>.
-            val os = System.getProperty("os.name").lowercase()
-            val arch = System.getProperty("os.arch").lowercase()
-            val fxSuffix = (project.findProperty("fxSuffix") as String?) ?: when {
-                os.contains("win") -> "win"
-                os.contains("mac") -> if (arch == "aarch64") "mac-aarch64" else "mac"
-                arch == "aarch64" -> "linux-aarch64"
-                else -> "linux"
-            }
-            implementation("org.openjfx:javafx-base:21.0.5:${fxSuffix}")
-            implementation("org.openjfx:javafx-graphics:21.0.5:${fxSuffix}")
-            implementation("org.openjfx:javafx-controls:21.0.5:${fxSuffix}")
-            implementation("org.openjfx:javafx-swing:21.0.5:${fxSuffix}")
-            implementation("org.openjfx:javafx-web:21.0.5:${fxSuffix}")
-            implementation("org.openjfx:javafx-media:21.0.5:${fxSuffix}")
-
             implementation(libs.coil.network.okhttp)
             runtimeOnly(libs.kotlinx.coroutines.swing)
 
@@ -374,8 +357,6 @@ room {
 // ./gradlew :composeApp:checkStreamUrl [-PvideoId=<id>]
 listOf(
     "checkStreamUrl" to "it.fast4x.riplay.player.StreamUrlCheckKt",
-    "checkWebPlayback" to "it.fast4x.riplay.player.webview.WebPlaybackCheckKt",
-    "checkWebMusic" to "it.fast4x.riplay.player.webview.WebMusicCheckKt",
     "checkCef" to "it.fast4x.riplay.player.webview.WebCefCheckKt",
     "checkCefController" to "it.fast4x.riplay.player.webview.CefControllerCheckKt",
 ).forEach { (taskName, entryPoint) ->
