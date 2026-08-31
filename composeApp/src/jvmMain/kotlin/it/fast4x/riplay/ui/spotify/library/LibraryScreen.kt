@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -41,6 +42,7 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import database.DB
 import database.entities.Album
+import database.entities.Artist
 import database.entities.SongEntity
 import it.fast4x.riplay.player.QueueItem
 import it.fast4x.riplay.ui.spotify.RiPlayColors
@@ -52,10 +54,6 @@ private enum class LibraryTab(val label: String) {
 /**
  * Spotify-style library screen: tabbed Titres / Playlists / Albums / Artistes, fed by the shared
  * Room DAO (Flows). Pure UI + navigation callbacks — playback and screen routing stay with the caller.
- *
- * Playlists and Artistes have no query in the shared `MusicDatabaseDao` yet (only Song/Album are
- * wired there) — ponytail: show an empty state rather than extend the shared DAO; wire real queries
- * once commonMain grows playlist/artist support.
  */
 @Composable
 fun LibraryScreen(
@@ -78,12 +76,11 @@ fun LibraryScreen(
             when (tab) {
                 LibraryTab.SONGS -> SongsTab(onPlay)
                 LibraryTab.ALBUMS -> AlbumsTab(onOpenAlbum)
-                LibraryTab.PLAYLISTS -> EmptyTab("Les playlists locales arrivent bientôt.")
-                LibraryTab.ARTISTS -> EmptyTab("Les artistes suivis arrivent bientôt.")
+                LibraryTab.PLAYLISTS -> PlaylistsTab(onOpenPlaylist)
+                LibraryTab.ARTISTS -> ArtistsTab(onOpenArtist)
             }
         }
     }
-    // onOpenArtist/onOpenPlaylist are part of the public API, unused until those tabs get real data.
 }
 
 @Composable
@@ -222,6 +219,63 @@ private fun AlbumCard(album: Album, onClick: () -> Unit) {
         album.authorsText?.let {
             Text(it, color = RiPlayColors.textSecondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
+    }
+}
+
+@Composable
+private fun ArtistsTab(onOpenArtist: (String) -> Unit) {
+    var artists by remember { mutableStateOf<List<Artist>>(emptyList()) }
+    // Followed artists, not every artist the catalogue ever mentioned: the DAO filters on
+    // bookmarkedAt, which is what following sets.
+    LaunchedEffect(Unit) { DB.bookmarkedArtists().collect { artists = it } }
+
+    if (artists.isEmpty()) {
+        EmptyTab("Aucun artiste suivi pour le moment.")
+        return
+    }
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(minSize = 160.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        items(artists, key = { it.id }) { artist -> ArtistCard(artist) { onOpenArtist(artist.id) } }
+    }
+}
+
+@Composable
+private fun ArtistCard(artist: Artist, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+    Column(
+        Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (hovered) RiPlayColors.cardHover else RiPlayColors.card)
+            .hoverable(interaction)
+            .pointerInput(Unit) { detectTapGestures { onClick() } }
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        // Round, unlike the square album art: the shape is how Spotify separates the two.
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f)
+                .clip(CircleShape)
+                .background(RiPlayColors.surface),
+        ) {
+            artist.thumbnailUrl?.let {
+                AsyncImage(model = it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            }
+        }
+        Text(
+            artist.name ?: "Artiste",
+            color = RiPlayColors.textPrimary,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

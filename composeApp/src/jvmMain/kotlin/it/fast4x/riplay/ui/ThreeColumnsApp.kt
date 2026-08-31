@@ -14,7 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import database.MusicDatabaseDesktop
+import database.DB
 import database.entities.Song
 import it.fast4x.environment.Environment
 import it.fast4x.riplay.enums.PageType
@@ -31,6 +31,7 @@ import it.fast4x.riplay.ui.screens.QuickPicsScreen
 import it.fast4x.riplay.ui.spotify.NavSection
 import it.fast4x.riplay.ui.spotify.SpotifyShell
 import it.fast4x.riplay.ui.spotify.library.LibraryScreen
+import it.fast4x.riplay.ui.spotify.library.LocalPlaylistScreen
 import it.fast4x.riplay.ui.spotify.search.SearchScreen
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -39,7 +40,9 @@ import kotlinx.coroutines.launch
 @Composable
 fun ThreeColumnsApp() {
 
-    val db = remember { MusicDatabaseDesktop }
+    // DB, not MusicDatabaseDesktop: that accessor builds a fresh Room instance on every read, so
+    // taking it here opened a second connection to the same file as the rest of the UI.
+    val db = DB
     val coroutineScope by remember { mutableStateOf(CoroutineScope(Dispatchers.IO)) }
 
     var videoId by remember { mutableStateOf("") }
@@ -47,6 +50,7 @@ fun ThreeColumnsApp() {
     var artistId by remember { mutableStateOf("") }
     var albumId by remember { mutableStateOf("") }
     var playlistId by remember { mutableStateOf("") }
+    var localPlaylistId by remember { mutableStateOf(0L) }
     var mood by remember { mutableStateOf<Environment.Mood.Item?>(null) }
 
     // Embedded Chromium plays every track (it drives the real YouTube Music page), unlike stream
@@ -139,11 +143,17 @@ fun ThreeColumnsApp() {
                 }
             }
 
+            showPageType == PageType.LOCAL_PLAYLIST -> LocalPlaylistScreen(
+                playlistId = localPlaylistId,
+                onPlaySongs = ::playSongs,
+                onClose = { showPageType = PageType.QUICKPICS },
+            )
+
             activeSection == NavSection.LIBRARY -> LibraryScreen(
                 onPlay = { player?.playNow(listOf(it)) },
                 onOpenAlbum = { albumId = it.id; showPageType = PageType.ALBUM },
                 onOpenArtist = { artistId = it; showPageType = PageType.ARTIST },
-                onOpenPlaylist = {}, // ponytail: local playlists tab is empty-state; no browseId to open yet
+                onOpenPlaylist = { localPlaylistId = it; showPageType = PageType.LOCAL_PLAYLIST },
             )
 
             activeSection == NavSection.SEARCH -> SearchScreen(
