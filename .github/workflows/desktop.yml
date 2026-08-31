@@ -76,3 +76,39 @@ jobs:
             composeApp/build/compose/binaries/main/rpm/*.rpm
             composeApp/build/compose/binaries/main/msi/*.msi
           if-no-files-found: error
+
+  # The packages existed only as 90-day build artifacts, which is why the README's
+  # "download from the latest release" line has nothing to point at for desktop.
+  # On a v* tag they now land on the release itself.
+  release:
+    needs: package
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Collect the packages built by both jobs
+        uses: actions/download-artifact@v4
+        with:
+          pattern: riplay-desktop-*
+          path: packages
+          merge-multiple: true
+
+      - name: Attach them to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          find packages -type f \
+            \( -name '*.deb' -o -name '*.rpm' -o -name '*.msi' \) > assets.txt
+          cat assets.txt
+          test -s assets.txt || { echo "Nothing to publish"; exit 1; }
+          # Create the release only if it is absent: on a tag the Android workflow
+          # may have published it first, and its notes must survive.
+          gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+                 --title "$GITHUB_REF_NAME" --notes "Desktop packages for $GITHUB_REF_NAME."
+          # --clobber so a re-run replaces the assets instead of failing on a name
+          # that already exists.
+          xargs -a assets.txt gh release upload "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" --clobber
